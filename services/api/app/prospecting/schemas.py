@@ -207,9 +207,10 @@ class ShareCreated(BaseModel):
 
 
 class DeliveryRequest(BaseModel):
-    provider: Literal["queue", "mock", "resend"] = "queue"
+    provider: Literal["queue", "mock", "resend", "smtp_generic"] = "queue"
     test_recipient: str | None = Field(None, max_length=320)
     share_token: str | None = Field(None, min_length=20, max_length=200)
+    from_address: str | None = Field(None, max_length=320)
 
 
 class DeliveryResult(BaseModel):

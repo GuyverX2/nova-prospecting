@@ -23,7 +23,7 @@ export type ApiProspectingSummary = {
   providers: {
     discovery?: { provider?: string; configured?: boolean };
     website_fetch?: { enabled?: boolean };
-    email?: { provider?: string; configured?: boolean; real_send_enabled?: boolean };
+    email?: { provider?: string; configured?: boolean; real_send_enabled?: boolean; from_addresses?: string[] };
   };
 };
 
@@ -194,10 +194,17 @@ export function createProposalShare(apiBase: string, token: string, proposalId: 
   });
 }
 
-export function queueProposalDelivery(apiBase: string, token: string, proposalId: string, provider: "queue" | "mock" | "resend" = "queue", shareToken?: string) {
+export function queueProposalDelivery(
+  apiBase: string,
+  token: string,
+  proposalId: string,
+  provider: "queue" | "mock" | "resend" | "smtp_generic" = "queue",
+  shareToken?: string,
+  fromAddress?: string
+) {
   return request<{ status: string; external_sent: boolean; delivery_id: string }>(apiBase, token, `/proposals/${proposalId}/deliver`, {
     method: "POST",
-    body: JSON.stringify({ provider, share_token: shareToken || null })
+    body: JSON.stringify({ provider, share_token: shareToken || null, from_address: fromAddress || null })
   });
 }
 

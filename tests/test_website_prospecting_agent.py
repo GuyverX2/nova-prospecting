@@ -12,7 +12,7 @@ from app.db.session import Base
 from app.models.tenancy import Tenant
 from app.models.user import User
 from app.prospecting.analyzer import WebsiteAuditError, analyze_html, normalize_public_url
-from app.prospecting.outbound import deliver_email, opt_out_token
+from app.prospecting.outbound import ProspectingDeliveryError, deliver_email, opt_out_token
 from app.prospecting.pagespeed import PageSpeedError, run_pagespeed
 from app.prospecting.schemas import (
     AnalysisRequest,
@@ -335,6 +335,91 @@ def test_resend_delivery_uses_idempotency_and_one_click_headers(monkeypatch):
     body = json.loads(request.data)
     assert body["headers"]["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
     assert body["headers"]["List-Unsubscribe"].startswith("<https://")
+
+
+def test_smtp_generic_is_rejected_when_kill_switch_is_off(monkeypatch):
+    from app.core.config import settings
+    import app.prospecting.outbound as outbound_module
+
+    monkeypatch.setattr(settings, "PROSPECTING_REAL_EMAIL_ENABLED", False)
+    monkeypatch.setattr(settings, "PROSPECTING_EMAIL_PROVIDER", "smtp_generic")
+    monkeypatch.setattr(settings, "PROSPECTING_SMTP_HOST", "mail.example.test")
+    monkeypatch.setattr(settings, "PROSPECTING_SMTP_MAILBOX_1_ADDRESS", "operator@example.test")
+    monkeypatch.setattr(settings, "PROSPECTING_SMTP_MAILBOX_1_PASSWORD", "not-a-real-password")
+
+    def fail_smtp(*_args, **_kwargs):
+        raise AssertionError("SMTP must not open a socket when the kill switch is off")
+
+    monkeypatch.setattr(outbound_module.smtplib, "SMTP", fail_smtp)
+    try:
+        deliver_email(
+            provider="smtp_generic",
+            recipient="kontakt@example.se",
+            subject="Förslag",
+            text_body="Personligt förslag",
+            html_body="<p>Personligt förslag</p>",
+            unsubscribe_url="https://salesos.example.se/api/v1/public/prospecting/opt-out/id/token",
+            from_address="operator@example.test",
+        )
+        assert False, "Expected kill-switch rejection"
+    except ProspectingDeliveryError as exc:
+        assert exc.code == "REAL_EMAIL_DISABLED"
+
+
+def test_smtp_generic_uses_allowlisted_mailbox_without_network(monkeypatch):
+    from app.core.config import settings
+    import app.prospecting.outbound as outbound_module
+
+    captured = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            captured["host"] = host
+            captured["port"] = port
+            captured["timeout"] = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def starttls(self):
+            captured["starttls"] = True
+
+        def login(self, user, password):
+            captured["user"] = user
+            captured["password"] = password
+
+        def send_message(self, message):
+            captured["from"] = message["From"]
+            captured["to"] = message["To"]
+            captured["unsubscribe"] = message["List-Unsubscribe"]
+
+    monkeypatch.setattr(settings, "ENV", "local")
+    monkeypatch.setattr(settings, "PROSPECTING_REAL_EMAIL_ENABLED", True)
+    monkeypatch.setattr(settings, "PROSPECTING_EMAIL_PROVIDER", "smtp_generic")
+    monkeypatch.setattr(settings, "PROSPECTING_SMTP_HOST", "mail.example.test")
+    monkeypatch.setattr(settings, "PROSPECTING_SMTP_PORT", 587)
+    monkeypatch.setattr(settings, "PROSPECTING_SMTP_STARTTLS", True)
+    monkeypatch.setattr(settings, "PROSPECTING_SMTP_MAILBOX_1_ADDRESS", "operator@example.test")
+    monkeypatch.setattr(settings, "PROSPECTING_SMTP_MAILBOX_1_PASSWORD", "not-a-real-password")
+    monkeypatch.setattr(outbound_module.smtplib, "SMTP", FakeSMTP)
+    receipt = deliver_email(
+        provider="smtp_generic",
+        recipient="kontakt@example.se",
+        subject="Förslag",
+        text_body="Personligt förslag",
+        html_body="<p>Personligt förslag</p>",
+        unsubscribe_url="https://salesos.example.se/api/v1/public/prospecting/opt-out/id/token",
+        from_address="operator@example.test",
+    )
+    assert receipt.external_sent is True
+    assert receipt.provider == "smtp_generic"
+    assert captured["host"] == "mail.example.test"
+    assert captured["user"] == "operator@example.test"
+    assert captured["from"] == "operator@example.test"
+    assert captured["unsubscribe"].startswith("<https://")
 
 
 def test_public_capability_tokens_are_redacted_from_application_logs():

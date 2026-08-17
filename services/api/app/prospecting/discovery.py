@@ -53,7 +53,10 @@ def provider_status() -> dict:
         "email": {
             "provider": settings.PROSPECTING_EMAIL_PROVIDER,
             "real_send_enabled": settings.PROSPECTING_REAL_EMAIL_ENABLED,
-            "configured": bool(settings.PROSPECTING_EMAIL_API_KEY and settings.PROSPECTING_EMAIL_FROM),
+            "configured": settings.prospecting_email_configured(),
+            "from_addresses": settings.prospecting_smtp_from_addresses()
+            if settings.PROSPECTING_EMAIL_PROVIDER == "smtp_generic"
+            else ([settings.PROSPECTING_EMAIL_FROM] if settings.PROSPECTING_EMAIL_FROM else []),
         },
     }
 

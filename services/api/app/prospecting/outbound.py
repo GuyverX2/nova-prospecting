@@ -4,8 +4,10 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import smtplib
 import uuid
 from dataclasses import dataclass
+from email.message import EmailMessage
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -47,11 +49,21 @@ def deliver_email(
     html_body: str,
     unsubscribe_url: str,
     idempotency_key: str | None = None,
+    from_address: str | None = None,
 ) -> DeliveryReceipt:
     if provider == "queue":
         return DeliveryReceipt(provider="queue", delivery_id=f"queued_{uuid.uuid4().hex[:16]}", external_sent=False)
     if provider == "mock":
         return DeliveryReceipt(provider="mock", delivery_id=f"mock_{uuid.uuid4().hex[:16]}", external_sent=False)
+    if provider == "smtp_generic":
+        return _deliver_smtp_generic(
+            recipient=recipient,
+            subject=subject,
+            text_body=text_body,
+            html_body=html_body,
+            unsubscribe_url=unsubscribe_url,
+            from_address=from_address,
+        )
     if provider != "resend":
         raise ProspectingDeliveryError("EMAIL_PROVIDER_UNSUPPORTED", f"Unsupported email provider: {provider}")
     if not settings.PROSPECTING_REAL_EMAIL_ENABLED:
@@ -97,3 +109,47 @@ def deliver_email(
     if not delivery_id:
         raise ProspectingDeliveryError("EMAIL_PROVIDER_INVALID_RESPONSE", "Email provider response had no delivery id", 502)
     return DeliveryReceipt(provider="resend", delivery_id=delivery_id, external_sent=True)
+
+
+def _deliver_smtp_generic(
+    *,
+    recipient: str,
+    subject: str,
+    text_body: str,
+    html_body: str,
+    unsubscribe_url: str,
+    from_address: str | None,
+) -> DeliveryReceipt:
+    if not settings.PROSPECTING_REAL_EMAIL_ENABLED:
+        raise ProspectingDeliveryError("REAL_EMAIL_DISABLED", "Real prospecting email is disabled by the operator kill switch", 409)
+    if settings.PROSPECTING_EMAIL_PROVIDER != "smtp_generic":
+        raise ProspectingDeliveryError("EMAIL_PROVIDER_NOT_ALLOWED", "smtp_generic is not the configured prospecting provider", 409)
+    if not settings.is_local_env():
+        raise ProspectingDeliveryError("EMAIL_PROVIDER_NOT_ALLOWED", "smtp_generic real send is local_development only until production dual apply", 409)
+    mailboxes = {address: password for address, password in settings.prospecting_smtp_mailboxes()}
+    if not settings.PROSPECTING_SMTP_HOST or not mailboxes:
+        raise ProspectingDeliveryError("EMAIL_PROVIDER_NOT_CONFIGURED", "SMTP host and at least one mailbox are required", 409)
+    sender = (from_address or next(iter(mailboxes))).strip().lower()
+    if sender not in mailboxes:
+        raise ProspectingDeliveryError("EMAIL_FROM_NOT_ALLOWED", "From address is not in the smtp_generic allowlist", 409)
+    message = EmailMessage()
+    message["From"] = sender
+    message["To"] = recipient
+    message["Subject"] = subject
+    message["List-Unsubscribe"] = f"<{unsubscribe_url}>"
+    message["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+    message.set_content(text_body)
+    message.add_alternative(html_body, subtype="html")
+    try:
+        with smtplib.SMTP(settings.PROSPECTING_SMTP_HOST, settings.PROSPECTING_SMTP_PORT, timeout=20) as client:
+            if settings.PROSPECTING_SMTP_STARTTLS:
+                client.starttls()
+            client.login(sender, mailboxes[sender])
+            client.send_message(message)
+    except smtplib.SMTPAuthenticationError as exc:
+        raise ProspectingDeliveryError("EMAIL_PROVIDER_REJECTED", "SMTP authentication failed", 502) from exc
+    except smtplib.SMTPException as exc:
+        raise ProspectingDeliveryError("EMAIL_PROVIDER_REJECTED", "SMTP provider rejected the message", 502) from exc
+    except (TimeoutError, OSError) as exc:
+        raise ProspectingDeliveryError("EMAIL_PROVIDER_UNAVAILABLE", "SMTP provider could not be reached", 502) from exc
+    return DeliveryReceipt(provider="smtp_generic", delivery_id=f"smtp_{uuid.uuid4().hex[:16]}", external_sent=True)

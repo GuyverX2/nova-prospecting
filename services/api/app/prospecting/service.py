@@ -657,6 +657,7 @@ def deliver_proposal(db: Session, ctx: TenantContext, user: User, proposal_id: s
             html_body=html_body,
             unsubscribe_url=opt_out_url,
             idempotency_key=f"prospecting-{ctx.tenant_id}-{row.id}-{recipient_fingerprint}",
+            from_address=payload.from_address,
         )
     except ProspectingDeliveryError as exc:
         row.delivery_status = "failed"
