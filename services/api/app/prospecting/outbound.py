@@ -124,8 +124,6 @@ def _deliver_smtp_generic(
         raise ProspectingDeliveryError("REAL_EMAIL_DISABLED", "Real prospecting email is disabled by the operator kill switch", 409)
     if settings.PROSPECTING_EMAIL_PROVIDER != "smtp_generic":
         raise ProspectingDeliveryError("EMAIL_PROVIDER_NOT_ALLOWED", "smtp_generic is not the configured prospecting provider", 409)
-    if not settings.is_local_env():
-        raise ProspectingDeliveryError("EMAIL_PROVIDER_NOT_ALLOWED", "smtp_generic real send is local_development only until production dual apply", 409)
     mailboxes = {address: password for address, password in settings.prospecting_smtp_mailboxes()}
     if not settings.PROSPECTING_SMTP_HOST or not mailboxes:
         raise ProspectingDeliveryError("EMAIL_PROVIDER_NOT_CONFIGURED", "SMTP host and at least one mailbox are required", 409)

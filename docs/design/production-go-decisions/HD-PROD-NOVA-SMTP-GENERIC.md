@@ -42,7 +42,7 @@ Human proposal approval, suppression, daily limit, and audit remain required on 
 
 ## Does not authorize
 
-- production / staging host send (separate dual + host secret)
+- production / staging host send — use [HD-PROD-NOVA-SMTP-GENERIC-HOST.md](./HD-PROD-NOVA-SMTP-GENERIC-HOST.md) (H8c)
 - SMS / Twilio / 46elks
 - Resend or other paid email by default
 - Phase E AI outbound / Tool Gateway send

@@ -130,4 +130,4 @@ PROSPECTING_SMTP_MAILBOX_2_PASSWORD=<not in git>
 ```
 
 3. Restart API. `/website-agent` (authenticated) may send only after human verify. `/nova` stays isolated.  
-4. Production host send still needs a **new** dual.
+4. Production host send: [HD-PROD-NOVA-SMTP-GENERIC-HOST.md](./HD-PROD-NOVA-SMTP-GENERIC-HOST.md) (H8c). Dual pending Micha.
