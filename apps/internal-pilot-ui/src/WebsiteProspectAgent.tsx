@@ -672,7 +672,12 @@ function AutomationModal({ onClose, onSave }: { onClose: () => void; onSave: (en
   );
 }
 
-export function WebsiteProspectAgent() {
+type WebsiteProspectAgentProps = {
+  /** Keep the public Nova demo isolated from stored operator sessions and live APIs. */
+  demoOnly?: boolean;
+};
+
+export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentProps) {
   const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
   const [selectedId, setSelectedId] = useState(1);
   const [detailTab, setDetailTab] = useState<DetailTab>("analysis");
@@ -698,7 +703,9 @@ export function WebsiteProspectAgent() {
   const [apiSummary, setApiSummary] = useState<ApiProspectingSummary | null>(null);
   const [apiPolicy, setApiPolicy] = useState<ApiProspectingPolicy | null>(null);
   const apiBase = loadStoredApiBase();
-  const token = window.localStorage.getItem("salesos.salesDeskToken") || "";
+  // The standalone Nova route must never inherit an operator's authenticated session.
+  const token = demoOnly ? "" : window.localStorage.getItem("salesos.salesDeskToken") || "";
+  const homePath = demoOnly ? "/nova" : "/website-agent";
 
   const selected = leads.find((lead) => lead.id === selectedId) ?? leads[0];
 
@@ -1021,13 +1028,13 @@ export function WebsiteProspectAgent() {
   }
 
   return (
-    <div className="wpa-app">
+    <div className={`wpa-app ${demoOnly ? "wpa-app--nova-demo" : ""}`}>
       <aside className={`wpa-sidebar ${sidebarOpen ? "open" : ""}`}>
-        <div className="wpa-brand"><span className="wpa-brand__mark"><Icon name="sparkles" size={19} /></span><div><strong>SalesOS</strong><small>Webbprospektering</small></div><button aria-label="Stäng meny" onClick={() => setSidebarOpen(false)} type="button"><Icon name="close" /></button></div>
-        <div className="wpa-agent-state"><span className={agentRunning ? "running" : ""}><i /></span><div><strong>Nova</strong><small>{agentRunning ? "Arbetar med ny sökning" : "Agent online · redo"}</small></div></div>
+        <div className="wpa-brand"><span className="wpa-brand__mark"><Icon name="sparkles" size={19} /></span><div><strong>{demoOnly ? "Nova" : "SalesOS"}</strong><small>{demoOnly ? "Fristående demo" : "Webbprospektering"}</small></div><button aria-label="Stäng meny" onClick={() => setSidebarOpen(false)} type="button"><Icon name="close" /></button></div>
+        <div className="wpa-agent-state"><span className={agentRunning ? "running" : ""}><i /></span><div><strong>Nova</strong><small>{agentRunning ? "Arbetar med ny sökning" : demoOnly ? "Demo online · redo" : "Agent online · redo"}</small></div></div>
         <nav className="wpa-nav" aria-label="Huvudnavigation">
           <small>ARBETSFLÖDE</small>
-          <a aria-current="page" href="/website-agent"><Icon name="layout" /> Översikt</a>
+          <a aria-current="page" href={homePath}><Icon name="layout" /> Översikt</a>
           <button onClick={() => { setFilter("all"); setSidebarOpen(false); }} type="button"><Icon name="building" /> Prospekt <b>{leads.length + 9}</b></button>
           <button onClick={() => { setFilter("review"); setSidebarOpen(false); }} type="button"><Icon name="activity" /> Analyser <b>{reviewCount}</b></button>
           <button onClick={() => { setDetailTab("proposal"); setSidebarOpen(false); }} type="button"><Icon name="file" /> Kundförslag</button>
@@ -1046,7 +1053,7 @@ export function WebsiteProspectAgent() {
 
       <main className="wpa-main">
         <header className="wpa-topbar">
-          <div className="wpa-topbar__title"><button aria-label="Öppna meny" className="wpa-mobile-menu" onClick={() => setSidebarOpen(true)} type="button"><Icon name="menu" /></button><div><span>AGENTÖVERSIKT</span><h1>God morgon, Erik</h1><p>Nova har hittat <strong>3 nya möjligheter</strong> sedan ditt senaste besök.</p></div></div>
+          <div className="wpa-topbar__title"><button aria-label="Öppna meny" className="wpa-mobile-menu" onClick={() => setSidebarOpen(true)} type="button"><Icon name="menu" /></button><div><span>{demoOnly ? "NOVA · FRISTÅENDE DEMO" : "AGENTÖVERSIKT"}</span><h1>{demoOnly ? "Upptäck nästa affärsmöjlighet" : "God morgon, Erik"}</h1><p>Nova har hittat <strong>3 nya möjligheter</strong> sedan ditt senaste besök.</p></div></div>
           <div className="wpa-topbar__actions"><label className="wpa-global-search"><Icon name="search" size={17} /><input aria-label="Sök i alla företag" onChange={(event) => setSearch(event.target.value)} placeholder="Sök företag …" value={search} /><kbd>⌘ K</kbd></label><button aria-label="Notiser" className="wpa-notification" type="button"><Icon name="notification" /><i /></button><button className="wpa-button secondary analyze-url" onClick={() => setManualProspectOpen(true)} type="button"><Icon name="globe" size={16} /> Analysera URL</button><button className="wpa-button primary new-search" onClick={() => setCampaignOpen(true)} type="button"><Icon name="plus" size={17} /> Ny sökning</button></div>
         </header>
 
@@ -1054,10 +1061,10 @@ export function WebsiteProspectAgent() {
           <section className={`wpa-runtime-banner ${apiState}`}>
             <span><Icon name={apiState === "live" || apiState === "live_empty" ? "shield" : "activity"} size={16} /></span>
             <div>
-              <strong>{apiState === "live" ? "Säker API-session · beständiga data" : apiState === "live_empty" ? "API ansluten · arbetsytan är tom" : apiState === "loading" ? "Kontrollerar SalesOS-session …" : apiState === "error" ? "API kunde inte nås · demodata visas" : "Förhandsvisning med demodata"}</strong>
-              <small>{apiState === "live" ? `${apiSummary?.providers.website_fetch?.enabled ? "Webbanalys aktiverad" : "Webbanalys låst av operatör"} · ${apiSummary?.providers.email?.real_send_enabled ? "verklig e-post aktiverad" : "extern e-post låst"}` : apiState === "live_empty" ? "Lägg till en URL för en källbelagd analys eller starta en kampanj." : apiState === "demo" ? "Logga in via Sales Desk för tenant-isolerad lagring, revisionslogg och verifierad leverans." : "Inga externa åtgärder görs i detta läge."}</small>
+              <strong>{demoOnly ? "Nova-demo · tryggt isolerad från skarpa data" : apiState === "live" ? "Säker API-session · beständiga data" : apiState === "live_empty" ? "API ansluten · arbetsytan är tom" : apiState === "loading" ? "Kontrollerar SalesOS-session …" : apiState === "error" ? "API kunde inte nås · demodata visas" : "Förhandsvisning med demodata"}</strong>
+              <small>{demoOnly ? "Alla företag och resultat är demodata. Inget sparas, hämtas externt eller skickas." : apiState === "live" ? `${apiSummary?.providers.website_fetch?.enabled ? "Webbanalys aktiverad" : "Webbanalys låst av operatör"} · ${apiSummary?.providers.email?.real_send_enabled ? "verklig e-post aktiverad" : "extern e-post låst"}` : apiState === "live_empty" ? "Lägg till en URL för en källbelagd analys eller starta en kampanj." : apiState === "demo" ? "Logga in via Sales Desk för tenant-isolerad lagring, revisionslogg och verifierad leverans." : "Inga externa åtgärder görs i detta läge."}</small>
             </div>
-            {apiState === "demo" || apiState === "error" ? <a href="/sales-desk">Logga in</a> : <button onClick={() => void refreshWorkspace(true)} type="button"><Icon name="refresh" size={13} /> Synkronisera</button>}
+            {demoOnly ? <a href="/">Till SalesOS</a> : apiState === "demo" || apiState === "error" ? <a href="/sales-desk">Logga in</a> : <button onClick={() => void refreshWorkspace(true)} type="button"><Icon name="refresh" size={13} /> Synkronisera</button>}
           </section>
           <section className="wpa-stats" aria-label="Nyckeltal">
             <article><span className="blue"><Icon name="search" /></span><div><small>Analyserade webbplatser</small><strong>{apiSummary?.analyzed_sites ?? 48}</strong><p><b>{apiState === "live" ? "Sparade" : "+12"}</b> {apiState === "live" ? "i tenant" : "senaste 7 dagarna"}</p></div></article>
