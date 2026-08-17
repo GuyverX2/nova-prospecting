@@ -575,7 +575,13 @@ def create_share(db: Session, ctx: TenantContext, user: User, proposal_id: str, 
     row.share_expires_at = _now() + timedelta(days=expires_in_days)
     _audit(db, ctx, user, "prospecting.share_created", "website_proposal", row.id, request_id, {"expires_at": row.share_expires_at.isoformat()})
     db.commit()
-    return {"proposal_id": row.id, "token": token, "public_path": f"/api/v1/public/prospecting/proposals/{token}", "expires_at": row.share_expires_at}
+    return {
+        "proposal_id": row.id,
+        "token": token,
+        "public_path": f"/api/v1/public/prospecting/proposals/{token}",
+        "presentation_path": f"/api/v1/public/prospecting/presentations/{token}",
+        "expires_at": row.share_expires_at,
+    }
 
 
 def public_proposal(db: Session, token: str) -> tuple[WebsiteProposal, WebsiteProspect, WebsiteAnalysis]:
@@ -590,16 +596,27 @@ def public_proposal(db: Session, token: str) -> tuple[WebsiteProposal, WebsitePr
     return row, prospect, analysis
 
 
-def render_proposal_html(row: WebsiteProposal, prospect: WebsiteProspect, analysis: WebsiteAnalysis) -> str:
+def render_proposal_html(
+    row: WebsiteProposal,
+    prospect: WebsiteProspect,
+    analysis: WebsiteAnalysis,
+    *,
+    presentation_path: str | None = None,
+) -> str:
     proposal = proposal_dict(row)
     findings = _load(analysis.findings_json, [])
     packages = proposal["packages"]
     finding_html = "".join(f"<article><strong>{escape(str(item.get('title', 'Observation')))}</strong><p>{escape(str(item.get('detail', '')))}</p><small>Säkerhet: {round(float(item.get('confidence', 0)) * 100)}%</small></article>" for item in findings[:6])
     package_html = "".join(f"<article><h3>{escape(str(item.get('name', 'Paket')))}</h3><b>{int(item.get('price_sek', 0)):,} SEK</b><ul>{''.join(f'<li>{escape(str(feature))}</li>' for feature in item.get('features', []))}</ul></article>" for item in packages)
     sitemap = "".join(f"<span>{escape(str(page))}</span>" for page in proposal["sitemap"])
+    film_link = (
+        f'<a class="film" href="{escape(presentation_path, quote=True)}">Starta den kundanpassade mötesfilmen →</a>'
+        if presentation_path
+        else ""
+    )
     return f"""<!doctype html><html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(row.headline)}</title><style>
-@page{{size:A4;margin:14mm}}*{{box-sizing:border-box}}body{{margin:0;background:#f4f6f9;color:#17283e;font:15px/1.6 Inter,Arial,sans-serif}}main{{max-width:960px;margin:0 auto;background:#fff;padding:48px}}header{{padding:44px;border-radius:18px;color:#fff;background:linear-gradient(135deg,#112743,#2867d8)}}header small{{letter-spacing:.13em}}h1{{font-size:38px;line-height:1.1}}h2{{margin-top:36px}}.score{{display:inline-flex;padding:8px 14px;border-radius:30px;background:#eaf2fe;color:#245cae;font-weight:700}}.findings,.packages{{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}}article{{border:1px solid #e3e8ef;border-radius:12px;padding:18px}}article p,article small{{color:#69788d}}.sitemap{{display:flex;flex-wrap:wrap;gap:8px}}.sitemap span{{padding:8px 12px;border-radius:8px;background:#f1f5fa}}footer{{margin-top:40px;padding-top:20px;border-top:1px solid #e3e8ef;color:#718096}}@media(max-width:700px){{main{{padding:20px}}.findings,.packages{{grid-template-columns:1fr}}h1{{font-size:28px}}}}@media print{{body{{background:#fff}}main{{padding:0}}}}
-</style></head><body><main><header><small>KUNDANPASSAT WEBBFÖRSLAG</small><h1>{escape(row.headline)}</h1><p>{escape(row.summary)}</p></header><h2>Analys av nuläget</h2><p class="score">Förbättringspotential {analysis.improvement_score}/100</p><div class="findings">{finding_html}</div><h2>Föreslagen webbstruktur</h2><div class="sitemap">{sitemap}</div><h2>Tre genomförandenivåer</h2><div class="packages">{package_html}</div><footer>Förslag version {row.version} · {escape(prospect.company_name)} · Giltigt till {row.share_expires_at.date().isoformat() if row.share_expires_at else '—'}<br>Utskrift: använd webbläsarens Skriv ut → Spara som PDF.</footer></main></body></html>"""
+@page{{size:A4;margin:14mm}}*{{box-sizing:border-box}}body{{margin:0;background:#f4f6f9;color:#17283e;font:15px/1.6 Inter,Arial,sans-serif}}main{{max-width:960px;margin:0 auto;background:#fff;padding:48px}}header{{padding:44px;border-radius:18px;color:#fff;background:linear-gradient(135deg,#112743,#2867d8)}}header small{{letter-spacing:.13em}}h1{{font-size:38px;line-height:1.1}}h2{{margin-top:36px}}.film{{display:inline-flex;margin-top:18px;border:1px solid rgba(255,255,255,.42);border-radius:999px;padding:10px 16px;color:#fff;font-weight:700;text-decoration:none}}.score{{display:inline-flex;padding:8px 14px;border-radius:30px;background:#eaf2fe;color:#245cae;font-weight:700}}.findings,.packages{{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}}article{{border:1px solid #e3e8ef;border-radius:12px;padding:18px}}article p,article small{{color:#69788d}}.sitemap{{display:flex;flex-wrap:wrap;gap:8px}}.sitemap span{{padding:8px 12px;border-radius:8px;background:#f1f5fa}}footer{{margin-top:40px;padding-top:20px;border-top:1px solid #e3e8ef;color:#718096}}@media(max-width:700px){{main{{padding:20px}}.findings,.packages{{grid-template-columns:1fr}}h1{{font-size:28px}}}}@media print{{body{{background:#fff}}main{{padding:0}}.film{{display:none}}}}
+</style></head><body><main><header><small>KUNDANPASSAT WEBBFÖRSLAG</small><h1>{escape(row.headline)}</h1><p>{escape(row.summary)}</p>{film_link}</header><h2>Analys av nuläget</h2><p class="score">Förbättringspotential {analysis.improvement_score}/100</p><div class="findings">{finding_html}</div><h2>Föreslagen webbstruktur</h2><div class="sitemap">{sitemap}</div><h2>Tre genomförandenivåer</h2><div class="packages">{package_html}</div><footer>Förslag version {row.version} · {escape(prospect.company_name)} · Giltigt till {row.share_expires_at.date().isoformat() if row.share_expires_at else '—'}<br>Utskrift: använd webbläsarens Skriv ut → Spara som PDF.</footer></main></body></html>"""
 
 
 def deliver_proposal(db: Session, ctx: TenantContext, user: User, proposal_id: str, payload: DeliveryRequest, *, request_id: str | None = None) -> dict:

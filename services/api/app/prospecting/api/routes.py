@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.user import User
 from app.prospecting.models import WebsiteAnalysis, WebsiteProposal
+from app.prospecting.presentation import render_meeting_presentation_html
 from app.prospecting.schemas import (
     AnalysisItem,
     AnalysisRequest,
@@ -92,6 +93,23 @@ def _request_id(request: Request) -> str | None:
 
 def _http_error(exc: ProspectingError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail={"message": exc.detail, "code": exc.code})
+
+
+def _meeting_presentation_response(html: str) -> Response:
+    return Response(
+        content=html,
+        media_type="text/html",
+        headers={
+            "Cache-Control": "private, no-store, max-age=0",
+            "X-Robots-Tag": "noindex, nofollow, noarchive",
+            "Content-Security-Policy": (
+                "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
+                "img-src data:; connect-src 'none'; media-src 'none'; font-src 'none'; "
+                "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+            ),
+            "Referrer-Policy": "no-referrer",
+        },
+    )
 
 
 @router.get("/summary", response_model=ProspectingSummary)
@@ -258,6 +276,38 @@ def get_proposal(proposal_id: str, db: Session = Depends(get_db), ctx: TenantCon
         raise _http_error(exc) from exc
 
 
+@router.get("/proposals/{proposal_id}/presentation")
+def get_proposal_presentation(
+    proposal_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(get_prospecting_context),
+) -> Response:
+    """Preview the self-running meeting film without creating a public share."""
+    try:
+        proposal = require_proposal(db, ctx, proposal_id)
+        prospect = require_prospect(db, ctx, proposal.prospect_id)
+        analysis = (
+            db.query(WebsiteAnalysis)
+            .filter(
+                WebsiteAnalysis.tenant_id == ctx.tenant_id,
+                WebsiteAnalysis.id == proposal.analysis_id,
+                WebsiteAnalysis.prospect_id == prospect.id,
+                WebsiteAnalysis.status == "complete",
+            )
+            .first()
+        )
+        if analysis is None:
+            raise ProspectingError(
+                409,
+                "A completed analysis is required for the meeting presentation",
+                code="PRESENTATION_ANALYSIS_REQUIRED",
+            )
+        html = render_meeting_presentation_html(proposal, prospect, analysis)
+    except ProspectingError as exc:
+        raise _http_error(exc) from exc
+    return _meeting_presentation_response(html)
+
+
 @router.patch("/proposals/{proposal_id}", response_model=ProposalItem)
 def patch_proposal(
     proposal_id: str,
@@ -336,7 +386,12 @@ def post_suppression(
 def get_public_proposal(token: str, db: Session = Depends(get_db)) -> Response:
     try:
         proposal, prospect, analysis = public_proposal(db, token)
-        html = render_proposal_html(proposal, prospect, analysis)
+        html = render_proposal_html(
+            proposal,
+            prospect,
+            analysis,
+            presentation_path=f"/api/v1/public/prospecting/presentations/{token}",
+        )
     except ProspectingError as exc:
         raise _http_error(exc) from exc
     return Response(
@@ -349,6 +404,17 @@ def get_public_proposal(token: str, db: Session = Depends(get_db)) -> Response:
             "Referrer-Policy": "no-referrer",
         },
     )
+
+
+@public_router.get("/presentations/{token}")
+def get_public_presentation(token: str, db: Session = Depends(get_db)) -> Response:
+    """Play the approved proposal as a self-running, no-network meeting film."""
+    try:
+        proposal, prospect, analysis = public_proposal(db, token)
+        html = render_meeting_presentation_html(proposal, prospect, analysis)
+    except ProspectingError as exc:
+        raise _http_error(exc) from exc
+    return _meeting_presentation_response(html)
 
 
 @public_router.post("/opt-out/{prospect_id}/{token}")

@@ -174,6 +174,23 @@ export function updateProposal(apiBase: string, token: string, proposalId: strin
   return request<ApiProposal>(apiBase, token, `/proposals/${proposalId}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 
+export async function loadProposalPresentation(apiBase: string, token: string, proposalId: string): Promise<string> {
+  const response = await fetch(resolveApiUrl(apiBase, `/api/v1/prospecting/proposals/${proposalId}/presentation`), {
+    headers: { Accept: "text/html", Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) {
+    let message = response.statusText || "Mötesfilmen kunde inte skapas";
+    try {
+      const body = await response.json() as ApiErrorBody;
+      message = typeof body.detail === "string" ? body.detail : body.detail?.message || message;
+    } catch {
+      // Keep the HTTP status text when the API did not return JSON.
+    }
+    throw new ProspectingApiError(message, response.status);
+  }
+  return await response.text();
+}
+
 export function approveProposal(apiBase: string, token: string, proposalId: string, reviewerNote: string) {
   return request<ApiProposal>(apiBase, token, `/proposals/${proposalId}/approve`, {
     method: "POST",
@@ -188,7 +205,7 @@ export function approveProposal(apiBase: string, token: string, proposalId: stri
 }
 
 export function createProposalShare(apiBase: string, token: string, proposalId: string) {
-  return request<{ token: string; public_path: string; expires_at: string }>(apiBase, token, `/proposals/${proposalId}/share`, {
+  return request<{ token: string; public_path: string; presentation_path: string; expires_at: string }>(apiBase, token, `/proposals/${proposalId}/share`, {
     method: "POST",
     body: JSON.stringify({ expires_in_days: 14 })
   });

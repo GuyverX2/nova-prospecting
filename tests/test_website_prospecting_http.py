@@ -206,16 +206,36 @@ def test_share_security_duplicate_delivery_and_daily_limit():
             domain="leverans-ett.example.se",
             email="ett@leverans-ett.example.se",
         )
+        operator_preview = client.get(f"{BASE}/proposals/{proposal_one}/presentation", headers=headers)
+        assert operator_preview.status_code == 200
+        assert operator_preview.headers["cache-control"] == "private, no-store, max-age=0"
+        assert "Starta i helskärm" in operator_preview.text
+        assert client.get(f"{BASE}/proposals/{proposal_one}/presentation").status_code == 401
+
         share = client.post(f"{BASE}/proposals/{proposal_one}/share", headers=headers, json={"expires_in_days": 14})
         assert share.status_code == 200
         token = share.json()["token"]
+        assert share.json()["presentation_path"] == f"/api/v1/public/prospecting/presentations/{token}"
         public = client.get(f"/api/v1/public/prospecting/proposals/{token}")
         assert public.status_code == 200
         assert public.headers["cache-control"] == "private, no-store, max-age=0"
         assert public.headers["x-robots-tag"] == "noindex, nofollow, noarchive"
         assert "frame-ancestors 'none'" in public.headers["content-security-policy"]
         assert "Spara som PDF" in public.text
+        assert "Starta den kundanpassade mötesfilmen" in public.text
         assert client.get("/api/v1/public/prospecting/proposals/not-a-token").status_code == 404
+
+        meeting_film = client.get(f"/api/v1/public/prospecting/presentations/{token}")
+        assert meeting_film.status_code == 200
+        assert meeting_film.headers["cache-control"] == "private, no-store, max-age=0"
+        assert meeting_film.headers["x-robots-tag"] == "noindex, nofollow, noarchive"
+        assert "script-src 'unsafe-inline'" in meeting_film.headers["content-security-policy"]
+        assert "connect-src 'none'" in meeting_film.headers["content-security-policy"]
+        assert "Leverans Ett AB" in meeting_film.text
+        assert "Starta i helskärm" in meeting_film.text
+        assert "täckningsbidrag" not in meeting_film.text.lower()
+        assert "break-even" not in meeting_film.text.lower()
+        assert client.get("/api/v1/public/prospecting/presentations/not-a-token").status_code == 404
 
         first_delivery = client.post(
             f"{BASE}/proposals/{proposal_one}/deliver",
@@ -247,6 +267,8 @@ def test_share_security_duplicate_delivery_and_daily_limit():
         row.share_expires_at = datetime.utcnow() - timedelta(seconds=1)
         db.commit()
         expired = client.get(f"/api/v1/public/prospecting/proposals/{token}")
+        expired_film = client.get(f"/api/v1/public/prospecting/presentations/{token}")
         # Expired and unknown links are deliberately indistinguishable to public callers.
-        assert expired.status_code == 404
+        assert expired.status_code == expired_film.status_code == 404
         assert "SHARE_NOT_FOUND" in expired.text
+        assert "SHARE_NOT_FOUND" in expired_film.text

@@ -203,6 +203,7 @@ class ShareCreated(BaseModel):
     proposal_id: str
     token: str
     public_path: str
+    presentation_path: str
     expires_at: datetime
 
 

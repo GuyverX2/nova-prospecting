@@ -14,6 +14,7 @@ from app.models.user import User
 from app.prospecting.analyzer import WebsiteAuditError, analyze_html, normalize_public_url
 from app.prospecting.outbound import ProspectingDeliveryError, deliver_email, opt_out_token
 from app.prospecting.pagespeed import PageSpeedError, run_pagespeed
+from app.prospecting.presentation import build_meeting_story, render_meeting_presentation_html
 from app.prospecting.schemas import (
     AnalysisRequest,
     CampaignCreate,
@@ -80,12 +81,16 @@ def test_prospecting_routes_are_mounted():
         "/api/v1/prospecting/prospects/{prospect_id}/analyses",
         "/api/v1/prospecting/proposals/{proposal_id}/approve",
         "/api/v1/prospecting/proposals/{proposal_id}/deliver",
+        "/api/v1/prospecting/proposals/{proposal_id}/presentation",
         "/api/v1/public/prospecting/proposals/{token}",
+        "/api/v1/public/prospecting/presentations/{token}",
         "/api/v1/public/prospecting/opt-out/{prospect_id}/{token}",
     }
     assert required <= set(paths)
     assert "security" in paths["/api/v1/prospecting/summary"]["get"]
+    assert "security" in paths["/api/v1/prospecting/proposals/{proposal_id}/presentation"]["get"]
     assert "security" not in paths["/api/v1/public/prospecting/proposals/{token}"]["get"]
+    assert "security" not in paths["/api/v1/public/prospecting/presentations/{token}"]["get"]
 
 
 def test_html_analysis_has_metrics_findings_evidence_and_limitations():
@@ -198,6 +203,22 @@ def test_persistent_workflow_requires_human_review_and_honors_opt_out():
     rendered = render_proposal_html(row, prospect_row, analysis_row)
     assert "Exempel Bygg AB" in rendered
     assert "noindex" not in rendered  # response headers carry noindex, not customer content
+    story = build_meeting_story(row, prospect_row, analysis_row)
+    assert story["company"] == "Exempel Bygg AB"
+    assert len(story["scenes"]) == 9
+    assert story["duration_seconds"] >= 120
+    assert next(scene for scene in story["scenes"] if scene["id"] == "structure")["visual"] == "comparison"
+    roadmap = next(scene for scene in story["scenes"] if scene["id"] == "roadmap")
+    assert any(card["label"] == "Investering" for card in roadmap["cards"])
+    assert all(card["label"] != "Break-even" for card in roadmap["cards"])
+    meeting_film = render_meeting_presentation_html(row, prospect_row, analysis_row)
+    assert "Nova · kundmöte" in meeting_film
+    assert "Starta i helskärm" in meeting_film
+    assert "Målbild · koncept" in meeting_film
+    assert "täckningsbidrag" not in meeting_film.lower()
+    assert "break-even" not in meeting_film.lower()
+    assert "calculateBreakEven" not in meeting_film
+    assert "speechSynthesis" in meeting_film
 
     queued = deliver_proposal(db, ctx, user, proposal["id"], DeliveryRequest(provider="queue", share_token=share["token"]), request_id="req-delivery")
     assert queued["status"] == "queued"

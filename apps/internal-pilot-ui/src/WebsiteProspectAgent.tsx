@@ -8,6 +8,7 @@ import {
   createProposalShare,
   discoverCampaign,
   generateProposal,
+  loadProposalPresentation,
   loadProspectingWorkspace,
   queueProposalDelivery,
   suppressProspect,
@@ -672,6 +673,41 @@ function AutomationModal({ onClose, onSave }: { onClose: () => void; onSave: (en
   );
 }
 
+function InternalBusinessCaseModal({ lead, onClose }: { lead: Lead; onClose: () => void }) {
+  const recommended = lead.proposalPackages?.find((item) => item.recommended)?.price_sek || lead.opportunity || 0;
+  const [investment, setInvestment] = useState(recommended ? String(recommended) : "");
+  const [contribution, setContribution] = useState("");
+  const [closeRate, setCloseRate] = useState("");
+  const investmentValue = Number(investment) || 0;
+  const contributionValue = Number(contribution) || 0;
+  const closeRateValue = Number(closeRate) || 0;
+  const dealsToBreakEven = investmentValue > 0 && contributionValue > 0
+    ? Math.ceil(investmentValue / contributionValue)
+    : null;
+  const qualifiedLeadsNeeded = dealsToBreakEven && closeRateValue > 0
+    ? Math.ceil(dealsToBreakEven / (closeRateValue / 100))
+    : null;
+
+  return (
+    <div className="wpa-modal-backdrop" onMouseDown={onClose} role="presentation">
+      <section aria-labelledby="internal-case-title" aria-modal="true" className="wpa-modal wpa-internal-case-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog">
+        <header className="wpa-modal__header"><div className="wpa-modal__icon review"><Icon name="shield" size={21} /></div><div><span>ENDAST INTERN ARBETSYTA</span><h2 id="internal-case-title">Privat affärskalkyl för {lead.company}</h2></div><button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button></header>
+        <div className="wpa-internal-case-privacy"><Icon name="shield" size={17} /><div><strong>Marginaldata lämnar aldrig den här dialogen</strong><p>Värdena finns bara i minnet i denna webbläsarflik. De sparas inte, skickas inte till API:t och följer aldrig med kundförslaget, mötesfilmen eller delningslänken.</p></div></div>
+        <div className="wpa-internal-case-grid">
+          <label>Föreslagen investering, SEK<input min="0" onChange={(event) => setInvestment(event.target.value)} step="1000" type="number" value={investment} /></label>
+          <label>Internt täckningsbidrag per ny affär<input min="0" onChange={(event) => setContribution(event.target.value)} step="1000" type="number" value={contribution} /></label>
+          <label>Intern stängningsgrad från kvalificerat lead, %<input max="100" min="0" onChange={(event) => setCloseRate(event.target.value)} step="1" type="number" value={closeRate} /></label>
+        </div>
+        <div className="wpa-internal-case-results">
+          <article><span>Affärer till intern break-even</span><strong>{dealsToBreakEven ?? "—"}</strong><small>Investering ÷ täckningsbidrag, avrundat uppåt</small></article>
+          <article><span>Kvalificerade leads som behövs</span><strong>{qualifiedLeadsNeeded ?? "—"}</strong><small>Break-even-affärer ÷ intern stängningsgrad</small></article>
+        </div>
+        <footer className="wpa-modal__footer"><button className="wpa-button primary" onClick={onClose} type="button"><Icon name="check" /> Stäng och rensa värden</button></footer>
+      </section>
+    </div>
+  );
+}
+
 type WebsiteProspectAgentProps = {
   /** Keep the public Nova demo isolated from stored operator sessions and live APIs. */
   demoOnly?: boolean;
@@ -690,6 +726,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
   const [contactVerifyBusy, setContactVerifyBusy] = useState(false);
   const [proposalEditorOpen, setProposalEditorOpen] = useState(false);
   const [proposalEditorBusy, setProposalEditorBusy] = useState(false);
+  const [internalBusinessCaseOpen, setInternalBusinessCaseOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
   const [automationEnabled, setAutomationEnabled] = useState(false);
@@ -837,6 +874,31 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
       setDetailTab("analysis");
       setToast("Demoanalysen är klar. Logga in för ett sparat evidenspaket.");
     }, 1400);
+  }
+
+  async function openMeetingPresentation(): Promise<void> {
+    if (!token || !selected.proposalId) {
+      window.open("/nova-video", "_blank", "noopener,noreferrer");
+      setToast("Demoläget visar Nova-filmen. En sparad kundversion får en egen evidensbaserad mötesfilm.");
+      return;
+    }
+    const preview = window.open("", "_blank");
+    if (!preview) {
+      setToast("Tillåt popup-fönster för att starta mötesfilmen.");
+      return;
+    }
+    preview.document.title = `Nova förbereder ${selected.company} …`;
+    preview.document.body.innerHTML = "<p style=\"font:16px system-ui;padding:40px\">Nova bygger mötesfilmen från det verifierade kundupplägget …</p>";
+    try {
+      const html = await loadProposalPresentation(apiBase, token, selected.proposalId);
+      preview.document.open();
+      preview.document.write(html);
+      preview.document.close();
+      setToast("Den kundanpassade mötesfilmen är redo i ett nytt fönster.");
+    } catch (error) {
+      preview.close();
+      setToast(error instanceof Error ? error.message : "Mötesfilmen kunde inte skapas.");
+    }
   }
 
   async function createProposal() {
@@ -1135,6 +1197,11 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
                 {detailTab === "proposal" ? <>
                   <div className="wpa-proposal-heading"><span><Icon name="sparkles" size={16} /> AGENTGENERERAT UTKAST</span><h3>{selected.proposalHeadline || `Nytt webbupplägg för ${selected.company}`}</h3><p>Utformat från verifierade behov, bransch och befintligt innehåll.</p></div>
                   <WebsiteMockup lead={selected} />
+                  <section className="wpa-meeting-film">
+                    <div className="wpa-meeting-film__signal"><span><Icon name="sparkles" size={18} /></span><i /><i /></div>
+                    <div><small>NOVA · KUNDANPASSAD MÖTESFILM</small><h3>Gör analysen omöjlig att bläddra förbi.</h3><p>Nio självkörande kapitel med evidens, målbild, affärseffekt och nästa steg. Textning, valfri svensk webbläsarröst, helskärm och möteskontroller ingår.</p></div>
+                    <div className="wpa-meeting-film__actions"><button className="wpa-button primary" onClick={() => void openMeetingPresentation()} type="button"><Icon name="eye" size={15} /> {token && selected.proposalId ? "Starta mötesfilmen" : "Se filmexempel"}</button>{!demoOnly && token ? <button className="wpa-button secondary" onClick={() => setInternalBusinessCaseOpen(true)} type="button"><Icon name="shield" size={14} /> Intern kalkyl</button> : null}</div>
+                  </section>
                   <section><div className="wpa-subhead"><h3>Föreslagen struktur</h3><span>{selected.proposalSitemap?.length || 6} sidor</span></div><div className="wpa-sitemap">{(selected.proposalSitemap || ["Start", "Tjänster", "Projekt", "Om oss", "Kontakt", "Offert"]).map((page) => <span key={page}>{page}</span>)}</div></section>
                   <section><div className="wpa-subhead"><h3>Effekt & effektivisering</h3></div><div className="wpa-benefits">{(selected.proposalBenefits || [{ title: "Fler relevanta leads", detail: "Tydliga erbjudanden och CTA per kundbehov." }, { title: "Mindre manuellt arbete", detail: "Kvalificerande formulär och automatisk mötesbokning." }, { title: "Starkare lokal SEO", detail: "Ortssidor och teknisk struktur som går att mäta." }]).map((benefit, index) => <article key={`${benefit.title}-${index}`}><Icon name={(["trend", "bolt", "search"] as IconName[])[index % 3]} /><div><strong>{benefit.title}</strong><p>{benefit.detail}</p></div></article>)}</div></section>
                   {selected.proposalPackages?.length ? <section><div className="wpa-subhead"><h3>Genomförandenivåer</h3><span>Exkl. moms</span></div><div className="wpa-proposal-packages">{selected.proposalPackages.map((item) => <article className={item.recommended ? "recommended" : ""} key={item.name}><span>{item.recommended ? "REKOMMENDERAD" : "PAKET"}</span><strong>{item.name}</strong><b>{formatSek(item.price_sek)}</b><small>{item.features.slice(0, 3).join(" · ")}</small></article>)}</div></section> : null}
@@ -1145,7 +1212,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
                 {detailTab === "email" ? <>
                   <div className="wpa-email-state"><span className={selected.status === "approved" ? "approved" : "draft"}><Icon name={selected.status === "approved" ? "check" : "file"} size={14} /> {selected.status === "approved" ? "Godkänd för leverans" : "Utkast · ej skickat"}</span><small>Senast sparat nyss</small></div>
                   <section className="wpa-email-compose"><label>Till<div><input readOnly value={`${selected.contact.name} <${selected.contact.email}>`} />{selected.contact.verified ? <span><Icon name="check" size={11} /> Verifierad</span> : null}</div></label>{!demoOnly && (apiSummary?.providers.email?.from_addresses?.length || 0) > 0 ? <label>Avsändare<select onChange={(event) => setFromAddress(event.target.value)} value={fromAddress || apiSummary?.providers.email?.from_addresses?.[0] || ""}>{(apiSummary?.providers.email?.from_addresses || []).map((address) => <option key={address} value={address}>{address}</option>)}</select></label> : null}<label>Ämne<input onChange={(event) => setEmailSubject(event.target.value)} value={emailSubject} /></label><label>Meddelande<textarea onChange={(event) => setEmailBody(event.target.value)} rows={16} value={emailBody} /></label></section>
-                  <section className="wpa-attachment"><span><Icon name="file" /></span><div><strong>Webbplatsanalys & nytt upplägg</strong><small>Personlig webblänk · kundanpassad</small></div><button onClick={() => setDetailTab("proposal")} type="button"><Icon name="eye" size={15} /> Förhandsvisa</button></section>
+                  <section className="wpa-attachment"><span><Icon name="file" /></span><div><strong>Analys, kundupplägg & mötesfilm</strong><small>Personlig webblänk · kundanpassad · självkörande presentation</small></div><button onClick={() => setDetailTab("proposal")} type="button"><Icon name="eye" size={15} /> Förhandsvisa</button></section>
                   <div className="wpa-email-note"><Icon name="shield" size={16} /><span>{demoOnly ? "Utskicket levereras inte förrän en person har granskat och godkänt det." : apiSummary?.providers.email?.real_send_enabled && apiSummary.providers.email.provider === "smtp_generic" ? "Efter godkännande skickas mailet från den valda avsändaren. Kill-switch och spärrlista gäller." : "Utskicket köas lokalt tills smtp_generic och kill-switch är på efter dual approval."}</span></div>
                 </> : null}
               </div>
@@ -1164,6 +1231,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
       {manualProspectOpen ? <ManualProspectModal busy={manualProspectBusy} onClose={() => setManualProspectOpen(false)} onCreate={(payload) => void createAndAnalyzeManualProspect(payload)} /> : null}
       {contactVerifyOpen ? <ContactVerificationModal busy={contactVerifyBusy} lead={selected} onClose={() => setContactVerifyOpen(false)} onVerify={(source) => void verifySelectedContact(source)} /> : null}
       {proposalEditorOpen ? <ProposalEditorModal busy={proposalEditorBusy} lead={selected} onClose={() => setProposalEditorOpen(false)} onSave={(payload) => void saveProposalContent(payload)} /> : null}
+      {internalBusinessCaseOpen ? <InternalBusinessCaseModal lead={selected} onClose={() => setInternalBusinessCaseOpen(false)} /> : null}
       {reviewOpen ? <ReviewModal lead={selected} onApprove={approveDelivery} onClose={() => setReviewOpen(false)} /> : null}
       {automationOpen ? <AutomationModal onClose={() => setAutomationOpen(false)} onSave={(enabled) => void saveAutomation(enabled)} /> : null}
       {toast ? <div aria-live="polite" className="wpa-toast"><span><Icon name="check" size={15} /></span>{toast}<button aria-label="Stäng" onClick={() => setToast(null)} type="button"><Icon name="close" size={14} /></button></div> : null}

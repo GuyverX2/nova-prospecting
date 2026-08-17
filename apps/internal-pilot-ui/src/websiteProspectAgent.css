@@ -1654,6 +1654,19 @@
 .wpa-proposal-editor-body textarea:focus { border-color: #8aade4; box-shadow: 0 0 0 3px rgba(40, 103, 216, 0.08); }
 .wpa-proposal-editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+.wpa-internal-case-modal { width: min(680px, 100%); }
+.wpa-internal-case-privacy { display: flex; gap: 10px; margin: 18px 19px 0; border: 1px solid #b9d7ca; border-radius: 10px; padding: 12px; color: #27715a; background: #f2fbf7; }
+.wpa-internal-case-privacy strong { display: block; font-size: 9px; }
+.wpa-internal-case-privacy p { margin: 3px 0 0; color: #5c786e; font-size: 7px; line-height: 1.5; }
+.wpa-internal-case-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 16px 19px; }
+.wpa-internal-case-grid label { display: grid; gap: 6px; color: #596a80; font-size: 7.5px; font-weight: 650; }
+.wpa-internal-case-grid input { width: 100%; height: 38px; border: 1px solid #d8e1eb; border-radius: 8px; padding: 0 10px; color: #2d4058; background: #fff; font-size: 9px; }
+.wpa-internal-case-results { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 19px 18px; }
+.wpa-internal-case-results article { display: grid; gap: 4px; border: 1px solid #dce5ee; border-radius: 10px; padding: 13px; background: #f8fafc; }
+.wpa-internal-case-results span { color: #607189; font-size: 7px; }
+.wpa-internal-case-results strong { color: #235f9e; font-size: 24px; line-height: 1; }
+.wpa-internal-case-results small { color: #8996a7; font-size: 6.5px; }
+
 .wpa-detail-footer {
   display: flex;
   min-height: 57px;
@@ -1824,6 +1837,71 @@
   height: 25px;
   border-radius: 3px;
   background: linear-gradient(135deg, #dbe2e9, #f2f4f6);
+}
+
+.wpa-meeting-film {
+  position: relative;
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 11px;
+  overflow: hidden;
+  border: 1px solid rgba(65, 137, 207, 0.28);
+  border-radius: 10px;
+  padding: 12px;
+  color: #f5f9ff;
+  background:
+    radial-gradient(circle at 88% 5%, rgba(73, 175, 221, 0.28), transparent 35%),
+    linear-gradient(145deg, #0b1b31, #102c4b 68%, #0b2038);
+  box-shadow: 0 10px 24px rgba(18, 49, 83, 0.14);
+}
+
+.wpa-meeting-film::after {
+  position: absolute;
+  right: -35px;
+  bottom: -48px;
+  width: 120px;
+  height: 120px;
+  border: 1px solid rgba(100, 225, 211, 0.18);
+  border-radius: 50%;
+  content: "";
+  box-shadow: 0 0 0 20px rgba(74, 168, 255, 0.025), 0 0 0 40px rgba(74, 168, 255, 0.018);
+}
+
+.wpa-meeting-film__signal {
+  position: relative;
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  align-self: center;
+  border: 1px solid rgba(100, 225, 211, 0.46);
+  border-radius: 50%;
+  color: #75e4d7;
+  background: radial-gradient(circle, rgba(68, 167, 218, 0.24), rgba(7, 23, 42, 0.9));
+  box-shadow: 0 0 24px rgba(71, 163, 224, 0.24);
+}
+
+.wpa-meeting-film__signal i {
+  position: absolute;
+  inset: -5px;
+  border: 1px solid rgba(76, 168, 238, 0.22);
+  border-radius: 50%;
+  animation: wpa-meeting-pulse 3.2s ease-in-out infinite alternate;
+}
+
+.wpa-meeting-film__signal i:last-child { inset: -11px; animation-delay: -1.5s; }
+.wpa-meeting-film > div:nth-child(2) { position: relative; z-index: 1; }
+.wpa-meeting-film small { color: #73ddd2; font-size: 5.5px; font-weight: 800; letter-spacing: 0.1em; }
+.wpa-meeting-film h3 { margin: 3px 0; color: #fff; font-size: 9px; line-height: 1.2; }
+.wpa-meeting-film p { margin: 0; color: #aebed1; font-size: 6.3px; line-height: 1.45; }
+.wpa-meeting-film__actions { position: relative; z-index: 2; display: flex; grid-column: 2; gap: 6px; justify-self: start; }
+.wpa-meeting-film__actions .wpa-button { min-height: 27px; padding: 0 10px; border-color: rgba(255,255,255,.18); font-size: 6px; }
+.wpa-meeting-film__actions .wpa-button.primary { color: #0b2038; background: #f6fbff; }
+.wpa-meeting-film__actions .wpa-button.secondary { color: #dbe9f8; background: rgba(255,255,255,.06); }
+
+@keyframes wpa-meeting-pulse {
+  from { opacity: 0.4; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1.03); }
 }
 
 .wpa-sitemap {
@@ -2572,7 +2650,9 @@
   }
 
   .wpa-form-grid,
-  .wpa-proposal-editor-grid {
+  .wpa-proposal-editor-grid,
+  .wpa-internal-case-grid,
+  .wpa-internal-case-results {
     grid-template-columns: 1fr;
   }
 }
