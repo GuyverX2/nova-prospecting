@@ -1945,6 +1945,7 @@
 }
 
 .wpa-email-compose input,
+.wpa-email-compose select,
 .wpa-email-compose textarea {
   width: 100%;
   border: 1px solid #e0e5ec;
@@ -1958,7 +1959,8 @@
   outline: 0;
 }
 
-.wpa-email-compose input {
+.wpa-email-compose input,
+.wpa-email-compose select {
   height: 31px;
 }
 
@@ -1967,6 +1969,7 @@
 }
 
 .wpa-email-compose input:focus,
+.wpa-email-compose select:focus,
 .wpa-email-compose textarea:focus {
   border-color: #8eb0e7;
   box-shadow: 0 0 0 3px rgba(40, 103, 216, 0.08);

@@ -698,6 +698,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
   const [toast, setToast] = useState<string | null>(null);
   const [emailBody, setEmailBody] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
+  const [fromAddress, setFromAddress] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [apiState, setApiState] = useState<"demo" | "loading" | "live" | "live_empty" | "error">("loading");
   const [apiSummary, setApiSummary] = useState<ApiProspectingSummary | null>(null);
@@ -903,7 +904,18 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
         await updateProposal(apiBase, token, selected.proposalId, { email_body: emailBody, email_subject: emailSubject });
         await approveProposal(apiBase, token, selected.proposalId, "Verifierad av operatör i webbprospekteringsagenten.");
         const share = await createProposalShare(apiBase, token, selected.proposalId);
-        const delivery = await queueProposalDelivery(apiBase, token, selected.proposalId, "queue", share.token);
+        const emailCfg = apiSummary?.providers.email;
+        const canSendSmtp = Boolean(
+          emailCfg?.real_send_enabled && emailCfg?.provider === "smtp_generic" && emailCfg.configured
+        );
+        const delivery = await queueProposalDelivery(
+          apiBase,
+          token,
+          selected.proposalId,
+          canSendSmtp ? "smtp_generic" : "queue",
+          share.token,
+          fromAddress || emailCfg?.from_addresses?.[0]
+        );
         setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: "approved", updated: "Godkänd och köad nyss" } : lead));
         setReviewOpen(false);
         setDetailTab("email");
@@ -1132,9 +1144,9 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
 
                 {detailTab === "email" ? <>
                   <div className="wpa-email-state"><span className={selected.status === "approved" ? "approved" : "draft"}><Icon name={selected.status === "approved" ? "check" : "file"} size={14} /> {selected.status === "approved" ? "Godkänd för leverans" : "Utkast · ej skickat"}</span><small>Senast sparat nyss</small></div>
-                  <section className="wpa-email-compose"><label>Till<div><input readOnly value={`${selected.contact.name} <${selected.contact.email}>`} />{selected.contact.verified ? <span><Icon name="check" size={11} /> Verifierad</span> : null}</div></label><label>Ämne<input onChange={(event) => setEmailSubject(event.target.value)} value={emailSubject} /></label><label>Meddelande<textarea onChange={(event) => setEmailBody(event.target.value)} rows={16} value={emailBody} /></label></section>
+                  <section className="wpa-email-compose"><label>Till<div><input readOnly value={`${selected.contact.name} <${selected.contact.email}>`} />{selected.contact.verified ? <span><Icon name="check" size={11} /> Verifierad</span> : null}</div></label>{!demoOnly && (apiSummary?.providers.email?.from_addresses?.length || 0) > 0 ? <label>Avsändare<select onChange={(event) => setFromAddress(event.target.value)} value={fromAddress || apiSummary?.providers.email?.from_addresses?.[0] || ""}>{(apiSummary?.providers.email?.from_addresses || []).map((address) => <option key={address} value={address}>{address}</option>)}</select></label> : null}<label>Ämne<input onChange={(event) => setEmailSubject(event.target.value)} value={emailSubject} /></label><label>Meddelande<textarea onChange={(event) => setEmailBody(event.target.value)} rows={16} value={emailBody} /></label></section>
                   <section className="wpa-attachment"><span><Icon name="file" /></span><div><strong>Webbplatsanalys & nytt upplägg</strong><small>Personlig webblänk · kundanpassad</small></div><button onClick={() => setDetailTab("proposal")} type="button"><Icon name="eye" size={15} /> Förhandsvisa</button></section>
-                  <div className="wpa-email-note"><Icon name="shield" size={16} /><span>Utskicket levereras inte förrän en person har granskat och godkänt det.</span></div>
+                  <div className="wpa-email-note"><Icon name="shield" size={16} /><span>{demoOnly ? "Utskicket levereras inte förrän en person har granskat och godkänt det." : apiSummary?.providers.email?.real_send_enabled && apiSummary.providers.email.provider === "smtp_generic" ? "Efter godkännande skickas mailet från den valda avsändaren. Kill-switch och spärrlista gäller." : "Utskicket köas lokalt tills smtp_generic och kill-switch är på efter dual approval."}</span></div>
                 </> : null}
               </div>
 
