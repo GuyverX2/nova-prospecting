@@ -7,12 +7,14 @@ const CHORDS = [
   { root: 48, tones: [52, 55, 60] },
   { root: 43, tones: [55, 59, 62] }
 ];
-const PLUCK_STEP = 0.6;
+const PLUCK_STEP = 0.62;
 const PLUCK_SCALE = [69, 72, 74, 76, 79, 81];
 const PLUCK_PATTERN = [0, -1, 2, -1, 3, -1, 1, -1, 0, 2, -1, 3, 4, -1, 2, -1];
 export const JINGLE_NOTES = [67, 72, 76, 79];
 const JINGLE_STEP = 0.26;
 export const MUSIC_TAIL = 6;
+/** Breath between spoken scenes so cuts never clip the last word. */
+const SCENE_BREATH = 0.45;
 
 interface Voice {
   src: AudioScheduledSourceNode;
@@ -22,12 +24,18 @@ interface Voice {
 export class NovaAudioEngine {
   private readonly ctx: AudioContext;
   private readonly master: GainNode;
+  private readonly narrationBus: GainNode;
   private readonly musicBus: GainNode;
   private readonly padFilter: BiquadFilterNode;
   private readonly reverb: ConvolverNode;
+  private readonly reverbGain: GainNode;
+
+  private buffers: AudioBuffer[] = [];
   private starts: number[] = [];
   private total = 0;
   private finaleTime = 0;
+
+  private narrationSources: AudioBufferSourceNode[] = [];
   private musicVoices: Voice[] = [];
   private musicTimer: number | null = null;
   private nextEventTime = 0;
@@ -42,24 +50,32 @@ export class NovaAudioEngine {
     this.master = ctx.createGain();
     this.master.gain.value = 1;
     this.master.connect(ctx.destination);
+
+    this.narrationBus = ctx.createGain();
+    this.narrationBus.gain.value = 0.96;
+    this.narrationBus.connect(this.master);
+
     this.musicBus = ctx.createGain();
-    this.musicBus.gain.value = 0.16;
+    this.musicBus.gain.value = 0.13;
     this.musicBus.connect(this.master);
+
     this.padFilter = ctx.createBiquadFilter();
     this.padFilter.type = "lowpass";
-    this.padFilter.frequency.value = 900;
-    this.padFilter.Q.value = 0.5;
+    this.padFilter.frequency.value = 980;
+    this.padFilter.Q.value = 0.45;
     this.padFilter.connect(this.musicBus);
+
     this.reverb = ctx.createConvolver();
-    this.reverb.buffer = NovaAudioEngine.makeImpulseResponse(ctx, 2.4, 2.6);
-    const reverbGain = ctx.createGain();
-    reverbGain.gain.value = 0.55;
-    this.reverb.connect(reverbGain);
-    reverbGain.connect(this.musicBus);
+    this.reverb.buffer = NovaAudioEngine.makeImpulseResponse(ctx, 2.6, 2.5);
+    this.reverbGain = ctx.createGain();
+    this.reverbGain.gain.value = 0.5;
+    this.reverb.connect(this.reverbGain);
+    this.reverbGain.connect(this.musicBus);
+
     const lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
-    lfo.frequency.value = 0.07;
-    lfoGain.gain.value = 220;
+    lfo.frequency.value = 0.06;
+    lfoGain.gain.value = 180;
     lfo.connect(lfoGain);
     lfoGain.connect(this.padFilter.frequency);
     lfo.start();
@@ -78,15 +94,24 @@ export class NovaAudioEngine {
     return buffer;
   }
 
-  load(durations: number[]): void {
+  async load(files: string[]): Promise<void> {
+    const decoded = await Promise.all(
+      files.map(async (file) => {
+        const response = await fetch(file);
+        if (!response.ok) throw new Error(`Narration load failed: ${file}`);
+        const arrayBuffer = await response.arrayBuffer();
+        return this.ctx.decodeAudioData(arrayBuffer);
+      })
+    );
+    this.buffers = decoded;
     const starts: number[] = [];
     let acc = 0;
-    for (const duration of durations) {
+    for (const buffer of decoded) {
       starts.push(acc);
-      acc += duration;
+      acc += buffer.duration + SCENE_BREATH;
     }
     this.starts = starts;
-    this.total = acc + MUSIC_TAIL;
+    this.total = acc - SCENE_BREATH + MUSIC_TAIL;
     this.finaleTime = starts[starts.length - 1] ?? 0;
   }
 
@@ -129,8 +154,23 @@ export class NovaAudioEngine {
   }
 
   private seekInternal(target: number): void {
+    this.stopNarration();
     this.stopMusic();
     this.startOffset = this.ctx.currentTime - target;
+
+    const now = this.ctx.currentTime;
+    for (let i = 0; i < this.buffers.length; i += 1) {
+      const segmentStart = this.starts[i];
+      const segmentEnd = segmentStart + this.buffers[i].duration;
+      if (segmentEnd <= target) continue;
+      const offset = Math.max(0, target - segmentStart);
+      const source = this.ctx.createBufferSource();
+      source.buffer = this.buffers[i];
+      source.connect(this.narrationBus);
+      source.start(now + Math.max(0, segmentStart - target), offset);
+      this.narrationSources.push(source);
+    }
+
     this.nextEventTime = target;
     this.lastChordIndex = Math.floor(target / CHORD_DURATION);
     this.lastPluckIndex = Math.floor(target / PLUCK_STEP);
@@ -193,8 +233,8 @@ export class NovaAudioEngine {
       osc.frequency.value = midiToFreq(midi);
       const gain = this.ctx.createGain();
       gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.linearRampToValueAtTime(0.05, start + 1.4);
-      gain.gain.setValueAtTime(0.05, start + CHORD_DURATION - 2.2);
+      gain.gain.linearRampToValueAtTime(0.048, start + 1.4);
+      gain.gain.setValueAtTime(0.048, start + CHORD_DURATION - 2.2);
       gain.gain.linearRampToValueAtTime(0.0001, start + CHORD_DURATION);
       osc.connect(gain);
       gain.connect(this.padFilter);
@@ -210,8 +250,8 @@ export class NovaAudioEngine {
     osc.frequency.value = midiToFreq(chord.root - 12);
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.linearRampToValueAtTime(0.055, start + 1.2);
-    gain.gain.setValueAtTime(0.055, start + CHORD_DURATION - 2);
+    gain.gain.linearRampToValueAtTime(0.05, start + 1.2);
+    gain.gain.setValueAtTime(0.05, start + CHORD_DURATION - 2);
     gain.gain.linearRampToValueAtTime(0.0001, start + CHORD_DURATION);
     osc.connect(gain);
     gain.connect(this.musicBus);
@@ -226,12 +266,12 @@ export class NovaAudioEngine {
     osc.frequency.value = freq;
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.linearRampToValueAtTime(0.045, start + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + 1.1);
+    gain.gain.linearRampToValueAtTime(0.038, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 1.15);
     osc.connect(gain);
     gain.connect(this.musicBus);
     const wet = this.ctx.createGain();
-    wet.gain.setValueAtTime(0.05, start);
+    wet.gain.setValueAtTime(0.045, start);
     wet.gain.exponentialRampToValueAtTime(0.0001, start + 1.4);
     gain.connect(wet);
     wet.connect(this.reverb);
@@ -251,14 +291,14 @@ export class NovaAudioEngine {
         osc.type = "sine";
         osc.frequency.value = fundamental * partial;
         const gain = this.ctx.createGain();
-        const peak = (finale ? 0.17 : 0.13) * (partial === 1 ? 1 : 0.32);
+        const peak = (finale ? 0.16 : 0.12) * (partial === 1 ? 1 : 0.3);
         gain.gain.setValueAtTime(0.0001, noteStart);
         gain.gain.linearRampToValueAtTime(peak, noteStart + 0.008);
         gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + (finale ? 1.7 : 1.25));
         osc.connect(gain);
         gain.connect(this.musicBus);
         const wet = this.ctx.createGain();
-        wet.gain.value = finale ? 0.16 : 0.12;
+        wet.gain.value = finale ? 0.15 : 0.11;
         gain.connect(wet);
         wet.connect(this.reverb);
         osc.start(noteStart);
@@ -266,6 +306,33 @@ export class NovaAudioEngine {
         this.musicVoices.push({ src: osc, gain });
       });
     });
+
+    if (finale) {
+      const bass = this.ctx.createOscillator();
+      bass.type = "sine";
+      bass.frequency.value = midiToFreq(48);
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(0.13, start + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 2.6);
+      bass.connect(gain);
+      gain.connect(this.musicBus);
+      bass.start(start);
+      bass.stop(start + 2.8);
+      this.musicVoices.push({ src: bass, gain });
+    }
+  }
+
+  private stopNarration(): void {
+    for (const source of this.narrationSources) {
+      try {
+        source.stop();
+      } catch {
+        /* already stopped */
+      }
+      source.disconnect();
+    }
+    this.narrationSources = [];
   }
 
   private stopMusic(): void {

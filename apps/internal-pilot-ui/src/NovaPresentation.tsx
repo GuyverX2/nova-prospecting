@@ -10,7 +10,6 @@ type Scene = {
   eyebrow: string;
   title: string;
   caption: string;
-  duration: number;
 };
 
 const SCENES: Scene[] = [
@@ -19,87 +18,61 @@ const SCENES: Scene[] = [
     eyebrow: "Nova · demofilm",
     title: "Hittar möjligheten. Lämnar beslutet till er.",
     caption:
-      "Nova är SalesOS webbprospekteringsagent. Den söker, källkontrollerar och prioriterar — i en kontrollerad pilot, inte som autonom säljare.",
-    duration: 15
+      "Nova är SalesOS webbprospekteringsagent. Den söker, källkontrollerar och prioriterar — inte som en autonom säljare."
   },
   {
     id: "problem",
     eyebrow: "Där tiden går",
     title: "Rätt bolag tar för lång tid att hitta.",
-    caption: "Signaler finns överallt. Det som saknas är evidens och nästa steg när ni faktiskt ska agera.",
-    duration: 13
+    caption: "Signaler finns överallt. Det som saknas är evidens, och ett tydligt nästa steg när ni ska agera."
   },
   {
     id: "discovery",
     eyebrow: "Sökning",
     title: "Publika uppgifter. Kontrollerad webb.",
-    caption: "Nova utgår från publika företagsuppgifter, granskar nuvarande webb och lyfter det som går att förbättra.",
-    duration: 15
+    caption: "Nova utgår från publika företagsuppgifter, granskar nuvarande webb och lyfter det som går att förbättra."
   },
   {
     id: "analysis",
     eyebrow: "Underlag",
     title: "Poäng med synlig evidens.",
-    caption:
-      "Varje möjlighet får poäng, teknisk översikt och källkontrollerat underlag. Ni ser varför den syns — inte bara att den syns.",
-    duration: 16
+    caption: "Varje möjlighet får poäng, teknisk översikt och källkontrollerat underlag. Ni ser varför den syns."
   },
   {
     id: "proposal",
     eyebrow: "Kundupplägg",
     title: "Ett utkast ni äger.",
-    caption: "Nova tar fram ett redigerbart kundupplägg. Rubriker, paket och mejl ändras av er innan något lämnar bordet.",
-    duration: 15
+    caption: "Nova tar fram ett redigerbart kundupplägg. Rubriker, paket och mejl ändras av er innan något lämnar bordet."
   },
   {
     id: "control",
     eyebrow: "Mandat",
     title: "Ingen e-post går ut av sig själv.",
-    caption: "Mänsklig verifiering, spärrlista och spårbarhet sitter före leverans. AI hjälper. Människan beslutar.",
-    duration: 15
+    caption: "Mänsklig verifiering, spärrlista och spårbarhet sitter före leverans. AI hjälper. Människan beslutar."
   },
   {
     id: "live",
     eyebrow: "Efter filmen",
     title: "Se agenten på riktigt.",
-    caption: "Det ni öppnar sedan är den faktiska, kontrollerade Nova-demon — inte en tillrättalagd film.",
-    duration: 13
+    caption: "Det ni öppnar sedan är den faktiska, kontrollerade Nova-demon — inte en tillrättalagd film."
   },
   {
     id: "closing",
     eyebrow: "Nova",
     title: "Nästa möjlighet, med evidens.",
-    caption: "Öppna Nova-demon och ta fram nästa möjlighet med underlag, mandat och nästa steg på samma skärm.",
-    duration: 14
+    caption: "Öppna Nova-demon och ta fram nästa möjlighet med underlag, mandat och nästa steg på samma skärm."
   }
 ];
 
-const NOMINAL_DURATION = SCENES.reduce((sum, scene) => sum + scene.duration, 0) + MUSIC_TAIL;
+const NARRATION_FILES: string[] = SCENES.map(
+  (scene, index) => `/presentation/nova-${String(index + 1).padStart(2, "0")}-${scene.id}.mp3`
+);
+
+const NOMINAL_DURATION = 150 + MUSIC_TAIL;
 
 function formatTime(seconds: number, total: number) {
   const safe = Math.max(0, Math.min(total, seconds));
   return `${Math.floor(safe / 60)}:${Math.floor(safe % 60).toString().padStart(2, "0")}`;
-}
-
-function pickSwedishVoice(): SpeechSynthesisVoice | null {
-  if (typeof window === "undefined" || !window.speechSynthesis) return null;
-  const voices = window.speechSynthesis.getVoices();
-  return (
-    voices.find((voice) => voice.lang.toLowerCase().startsWith("sv")) ??
-    voices.find((voice) => /swedish|svenska/i.test(`${voice.name} ${voice.lang}`)) ??
-    null
-  );
-}
-
-function speakCaption(text: string, muted: boolean): void {
-  if (muted || typeof window === "undefined" || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "sv-SE";
-  utterance.rate = 1.02;
-  const voice = pickSwedishVoice();
-  if (voice) utterance.voice = voice;
-  window.speechSynthesis.speak(utterance);
 }
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
@@ -129,6 +102,9 @@ function SceneVisual({ id }: { id: SceneId }) {
       <div className={`novaOrb ${id === "closing" ? "novaOrb--finale" : ""}`} aria-hidden="true">
         <div className="novaOrb__ring novaOrb__ring--one" />
         <div className="novaOrb__ring novaOrb__ring--two" />
+        <div className="novaOrb__ring novaOrb__ring--three" />
+        <i className="novaOrb__spark novaOrb__spark--one" />
+        <i className="novaOrb__spark novaOrb__spark--two" />
         <div className="novaOrb__core">
           <strong>Nova</strong>
           <small>{id === "closing" ? "öppna demon" : "agent online"}</small>
@@ -139,8 +115,22 @@ function SceneVisual({ id }: { id: SceneId }) {
   if (id === "problem") {
     return (
       <div className="novaScatter" aria-hidden="true">
-        {[["Bolag", "oklart"], ["Webb", "saknas"], ["Poäng", "—"], ["Nästa steg", "?"]].map(([label, value]) => (
-          <div className="novaScatter__card" key={label}><span>{label}</span><b>{value}</b></div>
+        <svg className="novaScatter__lines" viewBox="0 0 520 320" preserveAspectRatio="none">
+          <path d="M80 70 C180 40 240 140 260 160" />
+          <path d="M430 80 C340 90 320 130 260 160" />
+          <path d="M90 250 C170 210 210 230 260 160" />
+          <path d="M430 250 C340 240 320 200 260 160" />
+        </svg>
+        {[
+          ["Bolag", "oklart"],
+          ["Webb", "saknas"],
+          ["Poäng", "—"],
+          ["Nästa steg", "?"]
+        ].map(([label, value], index) => (
+          <div className={`novaScatter__card novaScatter__card--${index + 1}`} key={label}>
+            <span>{label}</span>
+            <b>{value}</b>
+          </div>
         ))}
       </div>
     );
@@ -148,7 +138,12 @@ function SceneVisual({ id }: { id: SceneId }) {
   if (id === "discovery") {
     return (
       <div className="novaRadar" aria-hidden="true">
-        <i />
+        <div className="novaRadar__dish">
+          <i />
+          <b />
+          <b />
+          <em />
+        </div>
         <span>Publika källor</span>
         <span>Webbkontroll</span>
         <span>Prioritering</span>
@@ -158,9 +153,16 @@ function SceneVisual({ id }: { id: SceneId }) {
   if (id === "analysis") {
     return (
       <div className="novaBoard" aria-hidden="true">
-        {[["Nordiska Fönster", "92"], ["Haga Markis", "81"], ["Kustkök Väst", "74"]].map(([name, score]) => (
-          <div className="novaBoard__row" key={name}>
-            <span>{name}</span>
+        {[
+          ["Nordiska Fönster", "92", "3 källor"],
+          ["Haga Markis", "81", "2 källor"],
+          ["Kustkök Väst", "74", "3 källor"]
+        ].map(([name, score, evidence], index) => (
+          <div className="novaBoard__row" key={name} style={{ "--row-index": index } as React.CSSProperties}>
+            <div>
+              <span>{name}</span>
+              <small>{evidence}</small>
+            </div>
             <b>{score}</b>
             <i style={{ width: `${score}%` }} />
           </div>
@@ -171,17 +173,29 @@ function SceneVisual({ id }: { id: SceneId }) {
   if (id === "proposal") {
     return (
       <div className="novaProposal" aria-hidden="true">
-        <small>Redigerbart utkast</small>
+        <header>
+          <small>Redigerbart utkast</small>
+          <em>v1 · ej skickat</em>
+        </header>
         <strong>Ny webb som säljer mer av det ni redan gör</strong>
-        <ul><li>Struktur</li><li>Paket</li><li>Mejl</li></ul>
+        <p>Struktur, paket och nästa steg — klart att justera innan något lämnar bordet.</p>
+        <ul>
+          <li>Struktur</li>
+          <li>Paket</li>
+          <li>Mejl</li>
+        </ul>
       </div>
     );
   }
   if (id === "control") {
     return (
       <div className="novaGate" aria-hidden="true">
-        {["Kontakt verifierad", "Spärrlista tom", "Mänskligt godkännande"].map((item) => (
-          <div className="novaGate__item" key={item}><i />{item}</div>
+        {["Kontakt verifierad", "Spärrlista tom", "Mänskligt godkännande"].map((item, index) => (
+          <div className="novaGate__item" key={item} style={{ "--gate-index": index } as React.CSSProperties}>
+            <i />
+            {item}
+            <b>✓</b>
+          </div>
         ))}
         <p>ingen extern e-post skickades</p>
       </div>
@@ -189,15 +203,29 @@ function SceneVisual({ id }: { id: SceneId }) {
   }
   return (
     <div className="novaLive" aria-hidden="true">
-      <span>Kontrollerad pilot</span>
-      <b>/nova</b>
+      <div className="novaLive__browser">
+        <header>
+          <i /><i /><i />
+          <span>salesos.se/nova</span>
+        </header>
+        <section>
+          <small>Kontrollerad pilot</small>
+          <strong>Samma flöde.<br />Samma mandat.</strong>
+          <div>
+            <span>Sökning</span>
+            <span>Evidens</span>
+            <span>Utkast</span>
+            <span>Godkännande</span>
+          </div>
+        </section>
+      </div>
+      <div className="liveBadge"><i />LIVE DEMO NÄSTA</div>
     </div>
   );
 }
 
 export function NovaPresentation() {
   const engineRef = useRef<NovaAudioEngine | null>(null);
-  const lastSpokenScene = useRef("");
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [started, setStarted] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -208,23 +236,27 @@ export function NovaPresentation() {
   const [sceneStarts, setSceneStarts] = useState<number[]>([]);
 
   useEffect(() => {
+    let cancelled = false;
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) {
       setStatus("error");
       return;
     }
     const engine = new NovaAudioEngine(new Ctor());
-    engine.load(SCENES.map((scene) => scene.duration));
     engineRef.current = engine;
-    setDuration(engine.duration);
-    setSceneStarts(engine.sceneStarts);
-    setStatus("ready");
-    const warmVoices = () => window.speechSynthesis?.getVoices();
-    warmVoices();
-    window.speechSynthesis?.addEventListener("voiceschanged", warmVoices);
+    engine
+      .load(NARRATION_FILES)
+      .then(() => {
+        if (cancelled) return;
+        setDuration(engine.duration);
+        setSceneStarts(engine.sceneStarts);
+        setStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("error");
+      });
     return () => {
-      window.speechSynthesis?.removeEventListener("voiceschanged", warmVoices);
-      window.speechSynthesis?.cancel();
+      cancelled = true;
     };
   }, []);
 
@@ -233,7 +265,6 @@ export function NovaPresentation() {
     document.title = "Nova-film — SalesOS webbprospektering";
     return () => {
       document.title = previousTitle;
-      window.speechSynthesis?.cancel();
     };
   }, []);
 
@@ -255,7 +286,6 @@ export function NovaPresentation() {
       setCurrentTime(time);
       if (time >= duration - 0.05) {
         engine.pause();
-        window.speechSynthesis?.cancel();
         setPlaying(false);
         setFinished(true);
       }
@@ -263,30 +293,19 @@ export function NovaPresentation() {
     return () => window.clearInterval(timer);
   }, [started, duration]);
 
-  useEffect(() => {
-    if (!started || !playing || !scene || muted || finished) return;
-    const key = `${scene.id}:${Math.floor((sceneStarts[activeSceneIndex] ?? 0) * 10)}`;
-    if (lastSpokenScene.current === key) return;
-    lastSpokenScene.current = key;
-    speakCaption(scene.caption, muted);
-  }, [activeSceneIndex, finished, muted, playing, scene, sceneStarts, started]);
-
   function togglePlayback() {
     const engine = engineRef.current;
     if (!engine) return;
     if (playing) {
       engine.pause();
-      window.speechSynthesis?.cancel();
       setPlaying(false);
       return;
     }
     if (finished || currentTime >= duration - 0.2) {
-      lastSpokenScene.current = "";
       engine.play(0);
       setCurrentTime(0);
       setFinished(false);
     } else {
-      lastSpokenScene.current = "";
       engine.resume();
     }
     setPlaying(true);
@@ -296,8 +315,6 @@ export function NovaPresentation() {
     const engine = engineRef.current;
     if (!engine) return;
     const target = Math.max(0, Math.min(duration - 0.05, seconds));
-    lastSpokenScene.current = "";
-    window.speechSynthesis?.cancel();
     setCurrentTime(target);
     setFinished(false);
     if (playing) {
@@ -313,7 +330,6 @@ export function NovaPresentation() {
     if (!engine) return;
     setStarted(true);
     setCurrentTime(0);
-    lastSpokenScene.current = "";
     if (fullscreen) document.documentElement.requestFullscreen().catch(() => undefined);
     engine.play(0);
     setPlaying(true);
@@ -323,8 +339,15 @@ export function NovaPresentation() {
     const next = !muted;
     setMuted(next);
     engineRef.current?.setMuted(next);
-    if (next) window.speechSynthesis?.cancel();
-    else lastSpokenScene.current = "";
+  }
+
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch {
+      /* browser can deny fullscreen without affecting playback */
+    }
   }
 
   useEffect(() => {
@@ -336,9 +359,7 @@ export function NovaPresentation() {
       } else if (event.key === "ArrowRight") seek(currentTime + 5);
       else if (event.key === "ArrowLeft") seek(currentTime - 5);
       else if (event.key.toLowerCase() === "m") toggleMute();
-      else if (event.key.toLowerCase() === "f") {
-        void (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
-      }
+      else if (event.key.toLowerCase() === "f") void toggleFullscreen();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -349,6 +370,7 @@ export function NovaPresentation() {
       <div className="presentationBackdrop" aria-hidden="true">
         <div className="presentationBackdrop__glow presentationBackdrop__glow--one" />
         <div className="presentationBackdrop__glow presentationBackdrop__glow--two" />
+        <div className="presentationBackdrop__key" />
         <div className="presentationBackdrop__grid" />
         <div className="presentationBackdrop__noise" />
       </div>
@@ -357,25 +379,35 @@ export function NovaPresentation() {
         <section className="presentationStart" aria-label="Starta Nova-filmen">
           <BrandMark />
           <div className="presentationStart__copy">
-            <span className="presentationKicker">Nova-film · ca 2 min 10 sek</span>
+            <span className="presentationKicker">Nova-film · ca 2 min</span>
             <h1>Webbprospektering<br />med evidens och mandat.</h1>
             <p>En separat film om Nova. Arenas klickbara demo ligger kvar på /nova — den här sidan är bara filmen.</p>
           </div>
           <div className="presentationStart__actions">
-            <button className="presentationButton presentationButton--primary" onClick={() => start(true)} type="button">
+            <button
+              className="presentationButton presentationButton--primary"
+              disabled={status !== "ready"}
+              onClick={() => start(true)}
+              type="button"
+            >
               <Icon name="play" /> Starta i helskärm
             </button>
-            <button className="presentationButton presentationButton--secondary" onClick={() => start(false)} type="button">
+            <button
+              className="presentationButton presentationButton--secondary"
+              disabled={status !== "ready"}
+              onClick={() => start(false)}
+              type="button"
+            >
               Starta i fönster
             </button>
           </div>
           <p className="presentationStart__status">
             <i className={status === "ready" ? "is-ready" : ""} />
             {status === "ready"
-              ? "Nova-filmen, textning och musik är redo"
+              ? "Nova-filmen, berättarröst och musik är redo"
               : status === "error"
-                ? "Ljudmotorn kunde inte startas — prova en annan webbläsare"
-                : "Förbereder Nova-filmen…"}
+                ? "Berättarrösten kunde inte laddas — kontrollera nätverket"
+                : "Laddar berättarröst…"}
           </p>
           <a className="presentationStart__skip" href="/nova">Gå direkt till Nova-demon</a>
         </section>
@@ -420,7 +452,7 @@ export function NovaPresentation() {
             <button aria-label={muted ? "Slå på ljud" : "Stäng av ljud"} onClick={toggleMute} type="button">
               <Icon name={muted ? "muted" : "sound"} />
             </button>
-            <button aria-label="Helskärm" onClick={() => void (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen())} type="button">
+            <button aria-label="Helskärm" onClick={() => void toggleFullscreen()} type="button">
               <Icon name="fullscreen" />
             </button>
           </footer>
