@@ -1158,6 +1158,25 @@
 .wpa-empty p { margin: 0; font-size: 9px; }
 .wpa-empty button { border: 0; color: var(--wpa-blue); background: transparent; font-size: 9px; font-weight: 650; }
 
+.wpa-empty--live {
+  padding: 28px 22px;
+  text-align: center;
+  gap: 10px;
+}
+.wpa-empty--live p {
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #5a6b82;
+}
+.wpa-empty--live strong { font-size: 15px; }
+.wpa-empty--live .wpa-button { margin-top: 6px; }
+
+.wpa-detail-card--empty {
+  display: grid;
+  place-items: center;
+}
+
 .wpa-detail-card {
   position: sticky;
   top: 104px;

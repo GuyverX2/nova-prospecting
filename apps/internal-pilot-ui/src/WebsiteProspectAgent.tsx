@@ -714,8 +714,14 @@ type WebsiteProspectAgentProps = {
 };
 
 export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentProps) {
-  const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
-  const [selectedId, setSelectedId] = useState(1);
+  const [leads, setLeads] = useState<Lead[]>(() => (
+    demoOnly || !(typeof window !== "undefined" && window.localStorage.getItem("salesos.salesDeskToken"))
+      ? INITIAL_LEADS
+      : []
+  ));
+  const [selectedId, setSelectedId] = useState(() => (
+    demoOnly || !(typeof window !== "undefined" && window.localStorage.getItem("salesos.salesDeskToken")) ? 1 : 0
+  ));
   const [detailTab, setDetailTab] = useState<DetailTab>("analysis");
   const [filter, setFilter] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
@@ -737,7 +743,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
   const [emailSubject, setEmailSubject] = useState("");
   const [fromAddress, setFromAddress] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [apiState, setApiState] = useState<"demo" | "loading" | "live" | "live_empty" | "error">("loading");
+  const [apiState, setApiState] = useState<"demo" | "loading" | "live" | "live_empty" | "error">(() => (demoOnly ? "demo" : "loading"));
   const [apiSummary, setApiSummary] = useState<ApiProspectingSummary | null>(null);
   const [apiPolicy, setApiPolicy] = useState<ApiProspectingPolicy | null>(null);
   const apiBase = loadStoredApiBase();
@@ -746,10 +752,13 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
   const homePath = demoOnly ? "/nova" : "/website-agent";
 
   const selected = leads.find((lead) => lead.id === selectedId) ?? leads[0];
+  const liveSession = !demoOnly && Boolean(token) && (apiState === "live" || apiState === "live_empty");
 
   async function refreshWorkspace(showMessage = false): Promise<void> {
     if (!token) {
       setApiState("demo");
+      setLeads(INITIAL_LEADS);
+      setSelectedId(1);
       return;
     }
     try {
@@ -763,11 +772,15 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
         setSelectedId((current) => liveLeads.some((lead) => lead.id === current) ? current : liveLeads[0].id);
         setApiState("live");
       } else {
+        setLeads([]);
+        setSelectedId(0);
         setApiState("live_empty");
       }
       if (showMessage) setToast("Arbetsytan har synkroniserats med SalesOS API.");
     } catch {
       setApiState("error");
+      setLeads(INITIAL_LEADS);
+      setSelectedId(1);
     }
   }
 
@@ -778,11 +791,12 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
   }, []);
 
   useEffect(() => {
+    if (!selected) return;
     setEmailSubject(selected.emailSubject || `3 konkreta förbättringar för ${selected.domain}`);
     setEmailBody(
       selected.emailDraft || `Hej ${selected.contact.name.split(" ")[0]},\n\nJag tittade på ${selected.domain} och såg flera konkreta möjligheter att göra webbplatsen snabbare, tydligare och bättre på att skapa relevanta offertförfrågningar.\n\nVi har tagit fram en kort analys och ett nytt upplägg specifikt för ${selected.company}. De största möjligheterna är bättre mobilprestanda, en tydligare väg till kontakt och starkare lokal synlighet.\n\nJag delar gärna genomgången i ett kort 20-minutersmöte. Passar tisdag eller torsdag nästa vecka?\n\nVänliga hälsningar,\nErik på SalesOS Webbstudio`
     );
-  }, [selected.id, selected.company, selected.contact.name, selected.domain, selected.emailDraft]);
+  }, [selected?.id, selected?.company, selected?.contact.name, selected?.domain, selected?.emailDraft]);
 
   useEffect(() => {
     if (!toast) return;
@@ -843,6 +857,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
   }
 
   async function analyzeSelected() {
+    if (!selected) return;
     setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: "analyzing", updated: "Analyseras nu" } : lead));
     setToast(`Agenten analyserar ${selected.domain} …`);
     if (token && selected.apiId) {
@@ -902,6 +917,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
   }
 
   async function createProposal() {
+    if (!selected) return;
     if (token && selected.apiId) {
       try {
         const proposal = await generateProposal(apiBase, token, selected.apiId, selected.analysisId);
@@ -1109,7 +1125,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
         <nav className="wpa-nav" aria-label="Huvudnavigation">
           <small>ARBETSFLÖDE</small>
           <a aria-current="page" href={homePath}><Icon name="layout" /> Översikt</a>
-          <button onClick={() => { setFilter("all"); setSidebarOpen(false); }} type="button"><Icon name="building" /> Prospekt <b>{leads.length + 9}</b></button>
+          <button onClick={() => { setFilter("all"); setSidebarOpen(false); }} type="button"><Icon name="building" /> Prospekt <b>{liveSession ? leads.length : leads.length + 9}</b></button>
           <button onClick={() => { setFilter("review"); setSidebarOpen(false); }} type="button"><Icon name="activity" /> Analyser <b>{reviewCount}</b></button>
           <button onClick={() => { setDetailTab("proposal"); setSidebarOpen(false); }} type="button"><Icon name="file" /> Kundförslag</button>
           <button onClick={() => { setFilter("approved"); setSidebarOpen(false); }} type="button"><Icon name="mail" /> Utskick</button>
@@ -1127,7 +1143,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
 
       <main className="wpa-main">
         <header className="wpa-topbar">
-          <div className="wpa-topbar__title"><button aria-label="Öppna meny" className="wpa-mobile-menu" onClick={() => setSidebarOpen(true)} type="button"><Icon name="menu" /></button><div><span>{demoOnly ? "NOVA · FRISTÅENDE DEMO" : "AGENTÖVERSIKT"}</span><h1>{demoOnly ? "Upptäck nästa affärsmöjlighet" : "God morgon, Erik"}</h1><p>Nova har hittat <strong>3 nya möjligheter</strong> sedan ditt senaste besök.</p></div></div>
+          <div className="wpa-topbar__title"><button aria-label="Öppna meny" className="wpa-mobile-menu" onClick={() => setSidebarOpen(true)} type="button"><Icon name="menu" /></button><div><span>{demoOnly ? "NOVA · FRISTÅENDE DEMO" : liveSession ? "NOVA · LIVE" : "AGENTÖVERSIKT"}</span><h1>{demoOnly ? "Upptäck nästa affärsmöjlighet" : liveSession ? "Webbprospektering" : "God morgon, Erik"}</h1><p>{demoOnly ? <>Nova har hittat <strong>3 nya möjligheter</strong> sedan ditt senaste besök.</> : liveSession ? (apiState === "live_empty" ? "Inga sparade webbplatser ännu. Analysera en publik URL för att skapa evidens, kundupplägg och mötesfilm." : <>Nova har <strong>{leads.length}</strong> sparade möjligheter i den här arbetsytan.</>) : <>Nova har hittat <strong>3 nya möjligheter</strong> sedan ditt senaste besök.</>}</p></div></div>
           <div className="wpa-topbar__actions"><label className="wpa-global-search"><Icon name="search" size={17} /><input aria-label="Sök i alla företag" onChange={(event) => setSearch(event.target.value)} placeholder="Sök företag …" value={search} /><kbd>⌘ K</kbd></label><button aria-label="Notiser" className="wpa-notification" type="button"><Icon name="notification" /><i /></button><button className="wpa-button secondary analyze-url" onClick={() => setManualProspectOpen(true)} type="button"><Icon name="globe" size={16} /> Analysera URL</button><button className="wpa-button primary new-search" onClick={() => setCampaignOpen(true)} type="button"><Icon name="plus" size={17} /> Ny sökning</button></div>
         </header>
 
@@ -1141,14 +1157,14 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
             {demoOnly ? <a href="/">Till SalesOS</a> : apiState === "demo" || apiState === "error" ? <a href="/sales-desk">Logga in</a> : <button onClick={() => void refreshWorkspace(true)} type="button"><Icon name="refresh" size={13} /> Synkronisera</button>}
           </section>
           <section className="wpa-stats" aria-label="Nyckeltal">
-            <article><span className="blue"><Icon name="search" /></span><div><small>Analyserade webbplatser</small><strong>{apiSummary?.analyzed_sites ?? 48}</strong><p><b>{apiState === "live" ? "Sparade" : "+12"}</b> {apiState === "live" ? "i tenant" : "senaste 7 dagarna"}</p></div></article>
-            <article><span className="violet"><Icon name="target" /></span><div><small>Kvalificerade möjligheter</small><strong>{apiSummary?.qualified_opportunities ?? leads.length + 9}</strong><p><b>{apiState === "live" ? leads.length : "29%"}</b> {apiState === "live" ? "visas nu" : "av analyserade"}</p></div></article>
-            <article><span className="amber"><Icon name="clipboard" /></span><div><small>Väntar på granskning</small><strong>{apiSummary?.awaiting_review ?? reviewCount + 4}</strong><p>Din åtgärd krävs</p></div></article>
-            <article><span className="green"><Icon name="trend" /></span><div><small>Potentiellt ordervärde</small><strong>{Math.round((apiSummary?.potential_value_sek ?? totalPipeline + 98_000) / 1000)} tkr</strong><p><b>{apiState === "live" ? "Aktuell" : "+18%"}</b> pipeline</p></div></article>
+            <article><span className="blue"><Icon name="search" /></span><div><small>Analyserade webbplatser</small><strong>{liveSession ? (apiSummary?.analyzed_sites ?? 0) : (apiSummary?.analyzed_sites ?? 48)}</strong><p><b>{liveSession ? "Sparade" : "+12"}</b> {liveSession ? "i tenant" : "senaste 7 dagarna"}</p></div></article>
+            <article><span className="violet"><Icon name="target" /></span><div><small>Kvalificerade möjligheter</small><strong>{liveSession ? (apiSummary?.qualified_opportunities ?? leads.length) : (apiSummary?.qualified_opportunities ?? leads.length + 9)}</strong><p><b>{liveSession ? leads.length : "29%"}</b> {liveSession ? "visas nu" : "av analyserade"}</p></div></article>
+            <article><span className="amber"><Icon name="clipboard" /></span><div><small>Väntar på granskning</small><strong>{liveSession ? (apiSummary?.awaiting_review ?? reviewCount) : (apiSummary?.awaiting_review ?? reviewCount + 4)}</strong><p>Din åtgärd krävs</p></div></article>
+            <article><span className="green"><Icon name="trend" /></span><div><small>Potentiellt ordervärde</small><strong>{Math.round((liveSession ? (apiSummary?.potential_value_sek ?? totalPipeline) : (apiSummary?.potential_value_sek ?? totalPipeline + 98_000)) / 1000)} tkr</strong><p><b>{liveSession ? "Aktuell" : "+18%"}</b> pipeline</p></div></article>
           </section>
 
           <section className={`wpa-agent-run ${agentRunning ? "is-running" : ""}`}>
-            <div className="wpa-agent-run__main"><span className="wpa-agent-orb"><Icon name="sparkles" size={21} /></span><div><span>{agentRunning ? "NOVA ARBETAR" : "AKTIV SÖKNING"}</span><h2>{agentRunning ? "Söker, källkontrollerar och kvalificerar …" : campaignCriteria}</h2><p>{agentRunning ? "Publika företagsuppgifter → webbplatskontroll → kvalitetspoäng" : "Agenten bevakar 126 företag och prioriterar tydliga förbättringsbehov."}</p></div></div>
+            <div className="wpa-agent-run__main"><span className="wpa-agent-orb"><Icon name="sparkles" size={21} /></span><div><span>{agentRunning ? "NOVA ARBETAR" : liveSession ? "LIVE-ARBETSYTA" : "AKTIV SÖKNING"}</span><h2>{agentRunning ? "Söker, källkontrollerar och kvalificerar …" : liveSession ? (apiState === "live_empty" ? "Ingen aktiv kampanj" : campaignCriteria) : campaignCriteria}</h2><p>{agentRunning ? "Publika företagsuppgifter → webbplatskontroll → kvalitetspoäng" : liveSession ? (apiSummary?.providers.website_fetch?.enabled ? "Webbanalys är på. Lägg till en URL eller starta en sökning — inget skickas utan godkännande." : "Webbanalys är avstängd av operatörskill-switch. Du kan spara URL:er, men hämtning av HTML är låst.") : "Agenten bevakar 126 företag och prioriterar tydliga förbättringsbehov."}</p></div></div>
             <div className="wpa-flow" aria-label="Agentens arbetsflöde">{[
               ["search", "Hitta", "126 kontrollerade"], ["target", "Kvalificera", "14 möjligheter"], ["activity", "Analysera", "6 klara"], ["file", "Skapa förslag", "2 utkast"], ["shield", "Verifiera", "Manuellt"]
             ].map(([icon, label, meta], index) => <div className={index < 3 ? "done" : index === 3 ? "current" : ""} key={label}><span><Icon name={icon as IconName} size={15} /></span><p><strong>{label}</strong><small>{meta}</small></p>{index < 4 ? <i><Icon name="chevron" size={13} /></i> : null}</div>)}</div>
@@ -1163,7 +1179,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
                 <table className="wpa-prospects-table">
                   <thead><tr><th>Företag</th><th>Förbättringspoäng</th><th>Status</th><th>Potential</th><th aria-label="Åtgärder" /></tr></thead>
                   <tbody>{filteredLeads.map((lead) => (
-                    <tr className={selected.id === lead.id ? "selected" : ""} key={lead.id} onClick={() => selectLead(lead.id)}>
+                    <tr className={selected?.id === lead.id ? "selected" : ""} key={lead.id} onClick={() => selectLead(lead.id)}>
                       <td><div className="wpa-company-cell"><span style={{ background: `${lead.accent}16`, color: lead.accent }}>{lead.initials}</span><div><strong>{lead.company}</strong><small><Icon name="globe" size={12} /> {lead.domain} <i /> {lead.city}</small></div></div></td>
                       <td><div className="wpa-score-cell"><strong>{lead.score}</strong><div><span style={{ width: `${lead.score}%` }} /></div><small>{lead.score >= 80 ? "Hög" : "God"} potential</small></div></td>
                       <td><span className={`wpa-status ${statusClass(lead.status)}`}>{lead.status === "analyzing" ? <i /> : null}{lead.status === "approved" ? <Icon name="check" size={12} /> : null}{STATUS_LABELS[lead.status]}</span><small className="wpa-updated">{lead.updated}</small></td>
@@ -1172,11 +1188,23 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
                     </tr>
                   ))}</tbody>
                 </table>
-                {filteredLeads.length === 0 ? <div className="wpa-empty"><Icon name="search" /><strong>Inga företag matchar filtret</strong><p>Prova en annan sökning eller visa alla möjligheter.</p><button onClick={() => { setFilter("all"); setSearch(""); }} type="button">Rensa filter</button></div> : null}
+                {filteredLeads.length === 0 ? (
+                  liveSession && leads.length === 0 ? (
+                    <div className="wpa-empty wpa-empty--live">
+                      <Icon name="globe" />
+                      <strong>Inga sparade webbplatser ännu</strong>
+                      <p>Analysera en publik URL. Nova hämtar evidens och skapar kundupplägg — inget skickas utan ditt godkännande.</p>
+                      <button onClick={() => setManualProspectOpen(true)} type="button">Analysera URL</button>
+                    </div>
+                  ) : (
+                    <div className="wpa-empty"><Icon name="search" /><strong>Inga företag matchar filtret</strong><p>Prova en annan sökning eller visa alla möjligheter.</p><button onClick={() => { setFilter("all"); setSearch(""); }} type="button">Rensa filter</button></div>
+                  )
+                ) : null}
               </div>
               <footer className="wpa-table-footer"><span>Senast uppdaterad nyss</span><button onClick={() => setToast("Listan är uppdaterad med senaste agentresultaten.")} type="button"><Icon name="refresh" size={14} /> Uppdatera</button></footer>
             </section>
 
+            {selected ? (
             <aside className="wpa-detail-card" aria-label={`Detalj för ${selected.company}`}>
               <header className="wpa-detail-head">
                 <div className="wpa-detail-company"><span style={{ background: `${selected.accent}16`, color: selected.accent }}>{selected.initials}</span><div><h2>{selected.company}</h2><a href={`https://${selected.domain}`} rel="noreferrer" target="_blank">{selected.domain} <Icon name="external" size={12} /></a></div></div>
@@ -1223,16 +1251,26 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
                 {detailTab === "email" ? <><button className="wpa-button secondary" onClick={() => setToast("Testleverans simulerad — ingen extern e-post skickades i demoläget.")} type="button">Skicka test till mig</button><button className={`wpa-button primary ${selected.status === "approved" ? "approved" : ""}`} disabled={selected.doNotContact || !selected.contact.email} onClick={() => setReviewOpen(true)} type="button"><Icon name={selected.status === "approved" ? "check" : "shield"} size={15} /> {selected.status === "approved" ? "Visa verifiering" : "Granska & godkänn"}</button></> : null}
               </footer>
             </aside>
+            ) : (
+            <aside className="wpa-detail-card wpa-detail-card--empty" aria-label="Tom Nova-arbetsyta">
+              <div className="wpa-empty wpa-empty--live">
+                <Icon name="globe" />
+                <strong>Börja med en publik webbplats</strong>
+                <p>Live-läget visar bara sparade, tenant-isolerade prospekt. Demoföretag visas inte här.</p>
+                <button className="wpa-button primary" onClick={() => setManualProspectOpen(true)} type="button"><Icon name="plus" size={15} /> Analysera URL</button>
+              </div>
+            </aside>
+            )}
           </div>
         </div>
       </main>
 
       {campaignOpen ? <CampaignModal onClose={() => setCampaignOpen(false)} onStart={(criteria) => void startCampaign(criteria)} /> : null}
       {manualProspectOpen ? <ManualProspectModal busy={manualProspectBusy} onClose={() => setManualProspectOpen(false)} onCreate={(payload) => void createAndAnalyzeManualProspect(payload)} /> : null}
-      {contactVerifyOpen ? <ContactVerificationModal busy={contactVerifyBusy} lead={selected} onClose={() => setContactVerifyOpen(false)} onVerify={(source) => void verifySelectedContact(source)} /> : null}
-      {proposalEditorOpen ? <ProposalEditorModal busy={proposalEditorBusy} lead={selected} onClose={() => setProposalEditorOpen(false)} onSave={(payload) => void saveProposalContent(payload)} /> : null}
-      {internalBusinessCaseOpen ? <InternalBusinessCaseModal lead={selected} onClose={() => setInternalBusinessCaseOpen(false)} /> : null}
-      {reviewOpen ? <ReviewModal lead={selected} onApprove={approveDelivery} onClose={() => setReviewOpen(false)} /> : null}
+      {contactVerifyOpen && selected ? <ContactVerificationModal busy={contactVerifyBusy} lead={selected} onClose={() => setContactVerifyOpen(false)} onVerify={(source) => void verifySelectedContact(source)} /> : null}
+      {proposalEditorOpen && selected ? <ProposalEditorModal busy={proposalEditorBusy} lead={selected} onClose={() => setProposalEditorOpen(false)} onSave={(payload) => void saveProposalContent(payload)} /> : null}
+      {internalBusinessCaseOpen && selected ? <InternalBusinessCaseModal lead={selected} onClose={() => setInternalBusinessCaseOpen(false)} /> : null}
+      {reviewOpen && selected ? <ReviewModal lead={selected} onApprove={approveDelivery} onClose={() => setReviewOpen(false)} /> : null}
       {automationOpen ? <AutomationModal onClose={() => setAutomationOpen(false)} onSave={(enabled) => void saveAutomation(enabled)} /> : null}
       {toast ? <div aria-live="polite" className="wpa-toast"><span><Icon name="check" size={15} /></span>{toast}<button aria-label="Stäng" onClick={() => setToast(null)} type="button"><Icon name="close" size={14} /></button></div> : null}
     </div>
