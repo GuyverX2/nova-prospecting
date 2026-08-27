@@ -12,13 +12,15 @@ PROSPECTING_DISCOVERY_PROVIDER=disabled
 PROSPECTING_EMAIL_PROVIDER=smtp_generic
 PROSPECTING_REAL_EMAIL_ENABLED=true
 PROSPECTING_PUBLIC_BASE_URL=https://salesos.se
-PROSPECTING_SMTP_HOST=mailcluster.loopia.se
+# triplusmedia.com MX is Google Workspace — use smtp.gmail.com (not Loopia).
+# Google Workspace usually needs an App Password when 2FA is on.
+PROSPECTING_SMTP_HOST=smtp.gmail.com
 PROSPECTING_SMTP_PORT=587
 PROSPECTING_SMTP_STARTTLS=true
 PROSPECTING_SMTP_MAILBOX_1_ADDRESS=martin@triplusmedia.com
-PROSPECTING_SMTP_MAILBOX_1_PASSWORD=<host secret — never git/chat>
+PROSPECTING_SMTP_MAILBOX_1_PASSWORD=<host secret / Google App Password — never git/chat>
 PROSPECTING_SMTP_MAILBOX_2_ADDRESS=micha@triplusmedia.com
-PROSPECTING_SMTP_MAILBOX_2_PASSWORD=<host secret — never git/chat>
+PROSPECTING_SMTP_MAILBOX_2_PASSWORD=<host secret / Google App Password — never git/chat>
 
 # Interactive helper (local or SSH on host):
 #   make configure-nova-smtp ENV_FILE=/opt/salesos/.env

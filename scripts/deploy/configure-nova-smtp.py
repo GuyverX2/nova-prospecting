@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Configure H8c Nova smtp_generic env keys without printing passwords."""
+"""Configure H8c Nova smtp_generic for Google Workspace (Gmail SMTP).
+
+triplusmedia.com MX → Google (aspmx.l.google.com), not Loopia.
+Credentials go only into a gitignored env file — never printed or committed.
+"""
 from __future__ import annotations
 
 import argparse
 import getpass
 import os
+import re
 import stat
 import sys
 from pathlib import Path
@@ -13,17 +18,23 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENV = REPO_ROOT / "services" / "api" / ".env"
 ENV_EXAMPLE = REPO_ROOT / "services" / "api" / ".env.example"
 
-NOVA_SMTP_KEYS: tuple[tuple[str, str], ...] = (
+# H8c dual-valid From allowlist + Gmail SMTP relay for Google Workspace mailboxes.
+NOVA_GMAIL_KEYS: tuple[tuple[str, str], ...] = (
     ("PROSPECTING_FETCH_ENABLED", "true"),
     ("PROSPECTING_DISCOVERY_PROVIDER", "disabled"),
     ("PROSPECTING_EMAIL_PROVIDER", "smtp_generic"),
     ("PROSPECTING_REAL_EMAIL_ENABLED", "true"),
     ("PROSPECTING_PUBLIC_BASE_URL", "https://salesos.se"),
-    ("PROSPECTING_SMTP_HOST", "mailcluster.loopia.se"),
+    ("PROSPECTING_SMTP_HOST", "smtp.gmail.com"),
     ("PROSPECTING_SMTP_PORT", "587"),
     ("PROSPECTING_SMTP_STARTTLS", "true"),
     ("PROSPECTING_SMTP_MAILBOX_1_ADDRESS", "martin@triplusmedia.com"),
     ("PROSPECTING_SMTP_MAILBOX_2_ADDRESS", "micha@triplusmedia.com"),
+)
+
+MAILBOXES: tuple[tuple[str, str], ...] = (
+    ("martin@triplusmedia.com", "PROSPECTING_SMTP_MAILBOX_1_PASSWORD"),
+    ("micha@triplusmedia.com", "PROSPECTING_SMTP_MAILBOX_2_PASSWORD"),
 )
 
 
@@ -44,7 +55,7 @@ def upsert_env_keys(path: Path, updates: dict[str, str]) -> None:
     if missing:
         if lines and lines[-1].strip():
             lines.append("")
-        lines.append("# Nova website prospecting — H8c smtp_generic (configure-nova-smtp.py)")
+        lines.append("# Nova H8c — Google Workspace via smtp.gmail.com (configure-nova-smtp.py)")
         for key in missing:
             lines.append(f"{key}={updates[key]}")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,19 +63,34 @@ def upsert_env_keys(path: Path, updates: dict[str, str]) -> None:
     path.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
 
-def prompt_password(label: str, *, env_var: str) -> str:
+def normalize_google_secret(raw: str) -> str:
+    """Strip whitespace; Google App Passwords are often pasted as 'xxxx xxxx xxxx xxxx'."""
+    return re.sub(r"\s+", "", raw.strip())
+
+
+def prompt_google_secret(address: str, *, env_var: str) -> str:
     from_env = os.environ.get(env_var, "").strip()
     if from_env:
-        return from_env
+        return normalize_google_secret(from_env)
+    print(f"\nMailbox: {address}")
+    print("  Prefer a Google App Password (16 chars) if 2FA is on.")
+    print("  Spaces in pasted App Passwords are removed automatically.")
     while True:
-        first = getpass.getpass(f"{label} password: ")
-        if first.strip():
-            return first
-        print("Password cannot be empty.", file=sys.stderr)
+        first = normalize_google_secret(getpass.getpass(f"  Google password / App Password for {address}: "))
+        if not first:
+            print("  Password cannot be empty.", file=sys.stderr)
+            continue
+        confirm = normalize_google_secret(getpass.getpass("  Confirm: "))
+        if first != confirm:
+            print("  Entries did not match — try again.", file=sys.stderr)
+            continue
+        return first
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Configure Nova H8c smtp_generic env (secrets stay local).")
+    parser = argparse.ArgumentParser(
+        description="Configure Nova H8c SMTP for Google Workspace (smtp.gmail.com)."
+    )
     parser.add_argument(
         "--env-file",
         type=Path,
@@ -79,6 +105,12 @@ def main() -> int:
     args = parser.parse_args()
     env_file: Path = args.env_file
 
+    print("Nova SMTP configure — Google Workspace")
+    print("  Host:     smtp.gmail.com:587 STARTTLS")
+    print("  From:     martin@triplusmedia.com, micha@triplusmedia.com")
+    print("  Note:     triplusmedia.com is Google mail (not Loopia/mailcluster)")
+    print(f"  Env file: {env_file}")
+
     if not env_file.is_file():
         if args.init_from_example or env_file == DEFAULT_ENV:
             if not ENV_EXAMPLE.is_file():
@@ -89,21 +121,16 @@ def main() -> int:
         else:
             raise SystemExit(f"Environment file not found: {env_file}")
 
-    updates = dict(NOVA_SMTP_KEYS)
-    updates["PROSPECTING_SMTP_MAILBOX_1_PASSWORD"] = prompt_password(
-        "martin@triplusmedia.com",
-        env_var="PROSPECTING_SMTP_MAILBOX_1_PASSWORD",
-    )
-    updates["PROSPECTING_SMTP_MAILBOX_2_PASSWORD"] = prompt_password(
-        "micha@triplusmedia.com",
-        env_var="PROSPECTING_SMTP_MAILBOX_2_PASSWORD",
-    )
+    updates = dict(NOVA_GMAIL_KEYS)
+    for address, env_var in MAILBOXES:
+        updates[env_var] = prompt_google_secret(address, env_var=env_var)
+
     upsert_env_keys(env_file, updates)
-    print(f"Updated Nova SMTP keys in {env_file} (passwords not shown).")
+    print()
+    print(f"Updated Gmail SMTP keys in {env_file} (passwords not shown).")
+    print("PROSPECTING_SMTP_HOST=smtp.gmail.com")
     print("Next:")
-    print("  make smoke-nova-smtp          # verify SMTP login")
-    print("  make run-demo-api             # or restart production API")
-    print("  https://salesos.se/nova       # live workspace (production)")
+    print("  make smoke-nova-smtp")
     return 0
 
 

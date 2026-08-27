@@ -58,7 +58,18 @@ def main() -> int:
         try:
             verify_login(address, password)
         except smtplib.SMTPAuthenticationError as exc:
-            raise SystemExit(f"SMTP authentication failed for {address}") from exc
+            hint = ""
+            if "gmail" not in (settings.PROSPECTING_SMTP_HOST or "").lower():
+                hint = (
+                    " Hint: triplusmedia.com MX is Google Workspace — "
+                    "set PROSPECTING_SMTP_HOST=smtp.gmail.com (App Password if 2FA)."
+                )
+            elif exc.smtp_code == 535:
+                hint = " Hint: Google often requires an App Password when 2FA is enabled."
+            raise SystemExit(
+                f"SMTP authentication failed for {address} "
+                f"(smtp_code={exc.smtp_code}).{hint}"
+            ) from exc
         except smtplib.SMTPException as exc:
             raise SystemExit(f"SMTP error for {address}: {exc}") from exc
         except OSError as exc:
