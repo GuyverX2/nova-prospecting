@@ -217,11 +217,17 @@ export function queueProposalDelivery(
   proposalId: string,
   provider: "queue" | "mock" | "resend" | "smtp_generic" = "queue",
   shareToken?: string,
-  fromAddress?: string
+  fromAddress?: string,
+  testRecipient?: string
 ) {
-  return request<{ status: string; external_sent: boolean; delivery_id: string }>(apiBase, token, `/proposals/${proposalId}/deliver`, {
+  return request<{ status: string; external_sent: boolean; delivery_id: string; recipient: string }>(apiBase, token, `/proposals/${proposalId}/deliver`, {
     method: "POST",
-    body: JSON.stringify({ provider, share_token: shareToken || null, from_address: fromAddress || null })
+    body: JSON.stringify({
+      provider,
+      share_token: shareToken || null,
+      from_address: fromAddress || null,
+      test_recipient: testRecipient || null
+    })
   });
 }
 

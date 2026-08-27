@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
-import { loadStoredApiBase } from "./apiBase";
+import { loadStoredApiBase, resolveApiUrl } from "./apiBase";
 import {
   analyzeProspect,
   approveProposal,
@@ -113,201 +113,6 @@ type Lead = {
   accent: string;
 };
 
-const INITIAL_LEADS: Lead[] = [
-  {
-    id: 1,
-    company: "Nordiska Fönster AB",
-    initials: "NF",
-    orgNumber: "559184-7311",
-    industry: "Bygg & renovering",
-    city: "Västerås",
-    domain: "nordiskafonster.se",
-    employees: "11–25",
-    turnover: "18,4 Mkr",
-    score: 88,
-    opportunity: 54000,
-    status: "analysis_ready",
-    updated: "12 min sedan",
-    contact: {
-      name: "Anna Lindberg",
-      role: "VD",
-      email: "anna@nordiskafonster.se",
-      verified: true
-    },
-    metrics: { performance: 34, seo: 51, accessibility: 62, mobile: 38 },
-    findings: [
-      {
-        title: "Långsam på mobil",
-        detail: "5,8 s till huvudinnehåll. Risk för tappad trafik och färre förfrågningar.",
-        severity: "high",
-        icon: "bolt"
-      },
-      {
-        title: "Otydlig väg till offert",
-        detail: "Primär CTA saknas på 4 av 6 viktigaste landningssidorna.",
-        severity: "high",
-        icon: "target"
-      },
-      {
-        title: "Svag lokal synlighet",
-        detail: "Saknar strukturerad data och separata sidor för prioriterade orter.",
-        severity: "medium",
-        icon: "search"
-      },
-      {
-        title: "Starkt kundbevis",
-        detail: "Bra recensioner och referensprojekt kan lyftas mycket tydligare.",
-        severity: "positive",
-        icon: "sparkles"
-      }
-    ],
-    pitch: "En snabb, lokal och konverterande webbplats som gör det enkelt att gå från inspiration till kostnadsfri offert.",
-    accent: "#2867d8"
-  },
-  {
-    id: 2,
-    company: "Bergslagens Mark & Grund",
-    initials: "BM",
-    orgNumber: "556942-1802",
-    industry: "Markentreprenad",
-    city: "Örebro",
-    domain: "bergslagensmark.se",
-    employees: "6–10",
-    turnover: "12,8 Mkr",
-    score: 82,
-    opportunity: 46000,
-    status: "proposal_ready",
-    updated: "38 min sedan",
-    contact: {
-      name: "Marcus Berg",
-      role: "Ägare",
-      email: "marcus@bergslagensmark.se",
-      verified: true
-    },
-    metrics: { performance: 43, seo: 46, accessibility: 70, mobile: 44 },
-    findings: [
-      { title: "Gammal struktur", detail: "Tjänster är samlade på en sida och svåra att hitta via Google.", severity: "high", icon: "layout" },
-      { title: "Få konverteringspunkter", detail: "Kontaktformuläret kräver nio fält och saknar trygghetssignaler.", severity: "medium", icon: "target" },
-      { title: "Bra projektbilder", detail: "Eget bildmaterial ger ett starkt underlag för ett nytt upplägg.", severity: "positive", icon: "sparkles" }
-    ],
-    pitch: "Ett robust digitalt säljverktyg som visar utförda projekt, rankar lokalt och förenklar offertförfrågningar.",
-    accent: "#826a3d"
-  },
-  {
-    id: 3,
-    company: "Sjöstadens VVS",
-    initials: "SV",
-    orgNumber: "559032-6143",
-    industry: "VVS & installation",
-    city: "Stockholm",
-    domain: "sjostadensvvs.se",
-    employees: "6–10",
-    turnover: "9,6 Mkr",
-    score: 78,
-    opportunity: 38000,
-    status: "analyzing",
-    updated: "Analyseras nu",
-    contact: {
-      name: "Johan Ek",
-      role: "Arbetsledare",
-      email: "johan@sjostadensvvs.se",
-      verified: false
-    },
-    metrics: { performance: 49, seo: 55, accessibility: 59, mobile: 52 },
-    findings: [
-      { title: "Mobilnavigering", detail: "Kontaktuppgifter kräver flera steg på mindre skärmar.", severity: "medium", icon: "globe" },
-      { title: "Akuttjänst otydlig", detail: "Jourerbjudandet syns inte tidigt i kundresan.", severity: "high", icon: "bolt" }
-    ],
-    pitch: "En mobilförst webbplats som leder både akuta och planerade VVS-behov till rätt kontaktväg direkt.",
-    accent: "#177a88"
-  },
-  {
-    id: 4,
-    company: "Lindholms Redovisning",
-    initials: "LR",
-    orgNumber: "556801-9423",
-    industry: "Ekonomi & redovisning",
-    city: "Uppsala",
-    domain: "lindholmsredovisning.se",
-    employees: "3–5",
-    turnover: "6,2 Mkr",
-    score: 74,
-    opportunity: 32000,
-    status: "qualified",
-    updated: "1 tim sedan",
-    contact: {
-      name: "Maria Lindholm",
-      role: "Auktoriserad konsult",
-      email: "maria@lindholmsredovisning.se",
-      verified: true
-    },
-    metrics: { performance: 58, seo: 62, accessibility: 72, mobile: 60 },
-    findings: [
-      { title: "Generiskt budskap", detail: "Startsidan beskriver tjänster men inte varför kunden ska välja byrån.", severity: "medium", icon: "file" },
-      { title: "Saknar bokningsflöde", detail: "Besökare kan inte boka ett första digitalt möte direkt.", severity: "high", icon: "calendar" }
-    ],
-    pitch: "En förtroendeskapande webbplats som paketerar rådgivningen och omvandlar besök till bokade introduktionsmöten.",
-    accent: "#6b52a3"
-  },
-  {
-    id: 5,
-    company: "Mälardalens Elservice",
-    initials: "ME",
-    orgNumber: "556714-0873",
-    industry: "Elinstallation",
-    city: "Eskilstuna",
-    domain: "malardalensel.se",
-    employees: "11–25",
-    turnover: "21,1 Mkr",
-    score: 71,
-    opportunity: 44000,
-    status: "approved",
-    updated: "Godkänd igår",
-    contact: {
-      name: "Daniel Sjöberg",
-      role: "VD",
-      email: "daniel@malardalensel.se",
-      verified: true
-    },
-    metrics: { performance: 52, seo: 67, accessibility: 65, mobile: 57 },
-    findings: [
-      { title: "Brett erbjudande", detail: "Privat- och företagskund blandas i samma informationsflöde.", severity: "medium", icon: "people" },
-      { title: "Lokal potential", detail: "Hög efterfrågan i tre närliggande kommuner utan egna landningssidor.", severity: "positive", icon: "trend" }
-    ],
-    pitch: "En tydlig webbplats med separata kundresor för privatpersoner, BRF och företag — optimerad för lokala sökningar.",
-    accent: "#d17d21"
-  }
-];
-
-const NEW_LEAD: Lead = {
-  id: 6,
-  company: "Västkustens Tak & Fasad",
-  initials: "VT",
-  orgNumber: "559296-4016",
-  industry: "Tak & fasad",
-  city: "Göteborg",
-  domain: "vastkusttakfasad.se",
-  employees: "6–10",
-  turnover: "14,7 Mkr",
-  score: 84,
-  opportunity: 48000,
-  status: "qualified",
-  updated: "Nyss hittad",
-  contact: {
-    name: "Emil Andersson",
-    role: "VD",
-    email: "emil@vastkusttakfasad.se",
-    verified: true
-  },
-  metrics: { performance: 39, seo: 48, accessibility: 64, mobile: 41 },
-  findings: [
-    { title: "Föråldrad mobilvy", detail: "Text och knappar skalar inte korrekt på mindre skärmar.", severity: "high", icon: "globe" },
-    { title: "Otydliga garantier", detail: "Garantier och certifieringar ligger gömda i brödtext.", severity: "medium", icon: "shield" },
-    { title: "Starkt bildmaterial", detail: "Många relevanta före- och efterbilder finns redan publicerade.", severity: "positive", icon: "sparkles" }
-  ],
-  pitch: "En visuell och förtroendeskapande webbplats som gör utförda projekt, garantier och offertvägen tydliga.",
-  accent: "#a84c42"
-};
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
   analysis_ready: "Klar för granskning",
@@ -666,8 +471,43 @@ function AutomationModal({ onClose, onSave }: { onClose: () => void; onSave: (en
         </header>
         <div className="wpa-automation-step active"><b>1</b><div><strong>Manuell verifiering</strong><p>Varje analys, kontakt och e-post godkänns av en person före leverans.</p></div><span>Aktiv nu</span></div>
         <div className="wpa-automation-step"><b>2</b><div><strong>Regelstyrd automation</strong><p>Leverera automatiskt först när kvalitet, kontaktverifiering och opt-out-policy är godkända.</p></div><label className="wpa-switch"><input checked={enabled} onChange={(event) => setEnabled(event.target.checked)} type="checkbox" /><i /></label></div>
-        {enabled ? <div className="wpa-warning"><Icon name="shield" /><span>Demoläge: inställningen sparas, men verklig e-postleverans kräver att en godkänd e-postleverantör kopplas in.</span></div> : null}
+        {enabled ? <div className="wpa-warning"><Icon name="shield" /><span>Regelstyrd automation sparas i tenant-policyn. Verklig e-postleverans kräver godkänd provider på host.</span></div> : null}
         <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Avbryt</button><button className="wpa-button primary" onClick={() => onSave(enabled)} type="button">Spara inställning</button></footer>
+      </section>
+    </div>
+  );
+}
+
+function ProviderSettingsModal({
+  onClose,
+  onOpenAutomation,
+  policy,
+  summary
+}: {
+  onClose: () => void;
+  onOpenAutomation: () => void;
+  policy: ApiProspectingPolicy | null;
+  summary: ApiProspectingSummary | null;
+}) {
+  const discovery = summary?.providers.discovery;
+  const websiteFetch = summary?.providers.website_fetch;
+  const email = summary?.providers.email;
+  return (
+    <div className="wpa-modal-backdrop" onMouseDown={onClose} role="presentation">
+      <section aria-labelledby="provider-settings-title" aria-modal="true" className="wpa-modal wpa-automation-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog">
+        <header className="wpa-modal__header">
+          <div className="wpa-modal__icon"><Icon name="settings" size={21} /></div>
+          <div><span>Operatörsstatus</span><h2 id="provider-settings-title">Nova-leverantörer och policy</h2></div>
+          <button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button>
+        </header>
+        <div className="wpa-provider-settings">
+          <article><span>Webbanalys</span><strong>{websiteFetch?.enabled ? "Aktiverad" : "Låst"}</strong><small>Robots.txt respekteras · privata nätverk blockeras</small></article>
+          <article><span>Discovery</span><strong>{discovery?.provider && discovery.provider !== "disabled" ? discovery.provider : "Avstängd"}</strong><small>{discovery?.configured ? "API konfigurerat" : "Manuell URL eller CSV"}</small></article>
+          <article><span>E-post</span><strong>{email?.real_send_enabled && email?.configured ? "Verklig sändning" : "Kö/mock"}</strong><small>{email?.provider || "disabled"}{email?.from_addresses?.length ? ` · ${email.from_addresses.join(", ")}` : ""}</small></article>
+          <article><span>Policy</span><strong>{policy?.mode === "rules_assisted" ? "Regelstyrd" : "Manuell granskning"}</strong><small>Daglig gräns {policy?.daily_delivery_limit ?? 20} · minsta poäng {policy?.minimum_score ?? 80}</small></article>
+          <article><span>Schemaläggare</span><strong>{policy?.scheduler_enabled ? "Aktiv" : "Låst"}</strong><small>Bakgrundskörning kräver operatörsgodkännande på host</small></article>
+        </div>
+        <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Stäng</button><button className="wpa-button primary" onClick={onOpenAutomation} type="button">Hantera automation</button></footer>
       </section>
     </div>
   );
@@ -708,20 +548,70 @@ function InternalBusinessCaseModal({ lead, onClose }: { lead: Lead; onClose: () 
   );
 }
 
-type WebsiteProspectAgentProps = {
-  /** Keep the public Nova demo isolated from stored operator sessions and live APIs. */
-  demoOnly?: boolean;
-};
+function NovaLoginGate({
+  apiBase,
+  onLogin
+}: {
+  apiBase: string;
+  onLogin: (token: string) => void;
+}) {
+  const [email, setEmail] = useState("tenant-wide@example.invalid");
+  const [password, setPassword] = useState("salesos");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentProps) {
-  const [leads, setLeads] = useState<Lead[]>(() => (
-    demoOnly || !(typeof window !== "undefined" && window.localStorage.getItem("salesos.salesDeskToken"))
-      ? INITIAL_LEADS
-      : []
-  ));
-  const [selectedId, setSelectedId] = useState(() => (
-    demoOnly || !(typeof window !== "undefined" && window.localStorage.getItem("salesos.salesDeskToken")) ? 1 : 0
-  ));
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const body = new URLSearchParams();
+      body.set("username", email.trim());
+      body.set("password", password);
+      const response = await fetch(resolveApiUrl(apiBase, "/api/v1/auth/login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body
+      });
+      const data = await response.json() as { access_token?: string; detail?: string };
+      if (!response.ok || !data.access_token) {
+        throw new Error(typeof data.detail === "string" ? data.detail : "Inloggningen misslyckades.");
+      }
+      window.localStorage.setItem("salesos.salesDeskToken", data.access_token);
+      onLogin(data.access_token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Inloggningen misslyckades.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="wpa-login-gate">
+      <section className="wpa-login-gate__card">
+        <div className="wpa-brand"><span className="wpa-brand__mark"><Icon name="sparkles" size={19} /></span><div><strong>Nova</strong><small>Webbprospektering</small></div></div>
+        <h1>Logga in för att fortsätta</h1>
+        <p>Tenant-isolerad lagring, revisionslogg och mänskligt mandat före varje utskick.</p>
+        <form onSubmit={(event) => void submit(event)}>
+          <label>E-post<input autoComplete="username" onChange={(event) => setEmail(event.target.value)} type="email" value={email} /></label>
+          <label>Lösenord<input autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} type="password" value={password} /></label>
+          {error ? <p className="wpa-login-gate__error">{error}</p> : null}
+          <button className="wpa-button primary" disabled={busy || !email.trim() || !password} type="submit">{busy ? "Loggar in …" : "Logga in"}</button>
+        </form>
+        <div className="wpa-login-gate__links">
+          <a href="/">Till SalesOS start</a>
+          <a href="/nova-video">Se Nova-filmen</a>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export function WebsiteProspectAgent() {
+  const apiBase = loadStoredApiBase();
+  const [sessionToken, setSessionToken] = useState(() => window.localStorage.getItem("salesos.salesDeskToken") || "");
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [selectedId, setSelectedId] = useState(0);
   const [detailTab, setDetailTab] = useState<DetailTab>("analysis");
   const [filter, setFilter] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
@@ -735,32 +625,34 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
   const [internalBusinessCaseOpen, setInternalBusinessCaseOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [automationEnabled, setAutomationEnabled] = useState(false);
   const [agentRunning, setAgentRunning] = useState(false);
+  const [testDeliveryBusy, setTestDeliveryBusy] = useState(false);
+  const [operatorEmail, setOperatorEmail] = useState("");
   const [campaignCriteria, setCampaignCriteria] = useState("Bygg & hantverk · Mälardalen");
   const [toast, setToast] = useState<string | null>(null);
   const [emailBody, setEmailBody] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [fromAddress, setFromAddress] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [apiState, setApiState] = useState<"demo" | "loading" | "live" | "live_empty" | "error">(() => (demoOnly ? "demo" : "loading"));
+  const [apiState, setApiState] = useState<"loading" | "live" | "live_empty" | "error">("loading");
   const [apiSummary, setApiSummary] = useState<ApiProspectingSummary | null>(null);
   const [apiPolicy, setApiPolicy] = useState<ApiProspectingPolicy | null>(null);
-  const apiBase = loadStoredApiBase();
-  // The standalone Nova route must never inherit an operator's authenticated session.
-  const token = demoOnly ? "" : window.localStorage.getItem("salesos.salesDeskToken") || "";
-  const homePath = demoOnly ? "/nova" : "/website-agent";
+  const token = sessionToken;
+  const homePath = "/nova";
 
   const selected = leads.find((lead) => lead.id === selectedId) ?? leads[0];
-  const liveSession = !demoOnly && Boolean(token) && (apiState === "live" || apiState === "live_empty");
+  const liveSession = Boolean(token) && (apiState === "live" || apiState === "live_empty");
 
   async function refreshWorkspace(showMessage = false): Promise<void> {
     if (!token) {
-      setApiState("demo");
-      setLeads(INITIAL_LEADS);
-      setSelectedId(1);
+      setApiState("loading");
+      setLeads([]);
+      setSelectedId(0);
       return;
     }
+    setApiState("loading");
     try {
       const workspace = await loadProspectingWorkspace(apiBase, token);
       setApiSummary(workspace.summary);
@@ -779,16 +671,51 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
       if (showMessage) setToast("Arbetsytan har synkroniserats med SalesOS API.");
     } catch {
       setApiState("error");
-      setLeads(INITIAL_LEADS);
-      setSelectedId(1);
+      setLeads([]);
+      setSelectedId(0);
     }
+  }
+
+  function handleLogin(nextToken: string) {
+    setSessionToken(nextToken);
+  }
+
+  function handleLogout() {
+    window.localStorage.removeItem("salesos.salesDeskToken");
+    setSessionToken("");
+    setLeads([]);
+    setSelectedId(0);
+    setApiSummary(null);
+    setApiPolicy(null);
+    setApiState("loading");
   }
 
   useEffect(() => {
     void refreshWorkspace();
-    // The token and API base are fixed for this mounted operator session.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [sessionToken]);
+
+  useEffect(() => {
+    if (!token) {
+      setOperatorEmail("");
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(resolveApiUrl(apiBase, "/api/v1/auth/me"), {
+          headers: { Accept: "application/json", Authorization: `Bearer ${token}` }
+        });
+        if (!response.ok || cancelled) return;
+        const profile = await response.json() as { email?: string };
+        if (!cancelled && profile.email) setOperatorEmail(profile.email);
+      } catch {
+        // Operator email is optional; test delivery shows a helpful toast when missing.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase, token]);
 
   useEffect(() => {
     if (!selected) return;
@@ -847,13 +774,8 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
       }
       return;
     }
-    window.setTimeout(() => {
-      setLeads((current) => current.some((lead) => lead.id === NEW_LEAD.id) ? current : [NEW_LEAD, ...current]);
-      setSelectedId(NEW_LEAD.id);
-      setDetailTab("analysis");
-      setAgentRunning(false);
-      setToast("Demo: 1 nytt kvalificerat företag hittat. Logga in för att spara resultat.");
-    }, 1800);
+    setAgentRunning(false);
+    setToast("Logga in för att starta en sparad kampanj.");
   }
 
   async function analyzeSelected() {
@@ -884,17 +806,12 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
       }
       return;
     }
-    window.setTimeout(() => {
-      setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: "analysis_ready", updated: "Nyss analyserad" } : lead));
-      setDetailTab("analysis");
-      setToast("Demoanalysen är klar. Logga in för ett sparat evidenspaket.");
-    }, 1400);
+    setToast("Logga in och välj ett sparat prospekt för att analysera.");
   }
 
   async function openMeetingPresentation(): Promise<void> {
-    if (!token || !selected.proposalId) {
-      window.open("/nova-video", "_blank", "noopener,noreferrer");
-      setToast("Demoläget visar Nova-filmen. En sparad kundversion får en egen evidensbaserad mötesfilm.");
+    if (!token || !selected?.proposalId) {
+      setToast("Skapa och spara ett kundupplägg innan du startar mötesfilmen.");
       return;
     }
     const preview = window.open("", "_blank");
@@ -931,9 +848,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
       }
       return;
     }
-    setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: "proposal_ready", updated: "Förslag skapat" } : lead));
-    setDetailTab("proposal");
-    setToast("Ett komplett demoupplägg har skapats från analysen.");
+    setToast("Logga in och välj ett sparat prospekt.");
   }
 
   async function saveProposalContent(payload: Pick<ApiProposal, "headline" | "summary" | "sitemap" | "benefits" | "packages" | "timeline">): Promise<void> {
@@ -943,30 +858,21 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
     }
     setProposalEditorBusy(true);
     try {
-      if (token && selected.proposalId) {
-        const proposal = await updateProposal(apiBase, token, selected.proposalId, payload);
-        setLeads((current) => current.map((lead) => lead.id === selected.id ? {
-          ...lead,
-          proposalHeadline: proposal.headline,
-          proposalSitemap: proposal.sitemap,
-          proposalBenefits: proposal.benefits,
-          proposalPackages: proposal.packages,
-          proposalTimeline: proposal.timeline,
-          pitch: proposal.summary,
-          updated: `Förslag v${proposal.version} redigerat`
-        } : lead));
-      } else {
-        setLeads((current) => current.map((lead) => lead.id === selected.id ? {
-          ...lead,
-          proposalHeadline: payload.headline,
-          proposalSitemap: payload.sitemap,
-          proposalBenefits: payload.benefits,
-          proposalPackages: payload.packages,
-          proposalTimeline: payload.timeline,
-          pitch: payload.summary,
-          updated: "Demoförslag redigerat"
-        } : lead));
+      if (!token || !selected.proposalId) {
+        setToast("Ett sparat kundupplägg krävs.");
+        return;
       }
+      const proposal = await updateProposal(apiBase, token, selected.proposalId, payload);
+      setLeads((current) => current.map((lead) => lead.id === selected.id ? {
+        ...lead,
+        proposalHeadline: proposal.headline,
+        proposalSitemap: proposal.sitemap,
+        proposalBenefits: proposal.benefits,
+        proposalPackages: proposal.packages,
+        proposalTimeline: proposal.timeline,
+        pitch: proposal.summary,
+        updated: `Förslag v${proposal.version} redigerat`
+      } : lead));
       setProposalEditorOpen(false);
       setToast("Kundupplägget är sparat som ett redigerbart utkast.");
     } catch (error) {
@@ -1008,16 +914,13 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
       }
       return;
     }
-    setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: "approved", updated: "Godkänd nyss" } : lead));
-    setReviewOpen(false);
-    setDetailTab("email");
-    setToast(automationEnabled ? "Demo godkänd — leveransen är köad enligt automationsregeln." : "Demo godkänd och placerad i den manuella leveranskön.");
+    setToast("Ett sparat och godkänt kundupplägg krävs.");
   }
 
   async function createAndAnalyzeManualProspect(payload: { company_name: string; website_url: string; contact_name: string; contact_email: string; city: string; legitimate_interest_note: string }): Promise<void> {
     if (!token) {
       setManualProspectOpen(false);
-      setToast("Logga in i Sales Desk först för att spara och analysera en riktig webbplats.");
+      setToast("Logga in för att spara och analysera en webbplats.");
       return;
     }
     setManualProspectBusy(true);
@@ -1087,29 +990,72 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
     }
   }
 
-  async function saveAutomation(enabled: boolean): Promise<void> {
-    if (token) {
-      try {
-        const policy = await updateProspectingPolicy(apiBase, token, {
-          mode: enabled ? "rules_assisted" : "manual_review",
-          auto_analyze: enabled,
-          auto_generate_proposal: enabled,
-          auto_queue_after_approval: enabled,
-          minimum_score: apiPolicy?.minimum_score ?? 80,
-          daily_delivery_limit: apiPolicy?.daily_delivery_limit ?? 20
-        });
-        setApiPolicy(policy);
-        setAutomationEnabled(policy.mode === "rules_assisted");
-        setAutomationOpen(false);
-        setToast(policy.scheduler_enabled ? "Regelstyrd automation är sparad och schemaläggaren är aktiv." : "Automationsreglerna är sparade. Bakgrundskörning förblir låst tills schemaläggaren aktiveras av operatör.");
-      } catch (error) {
-        setToast(error instanceof Error ? error.message : "Automationspolicyn kunde inte sparas.");
-      }
+  async function sendTestDelivery(): Promise<void> {
+    if (!token) {
+      setToast("Logga in för att skicka en testleverans.");
       return;
     }
-    setAutomationEnabled(enabled);
-    setAutomationOpen(false);
-    setToast(enabled ? "Demoläge: regelstyrt flöde visas, men ingen bakgrundskörning är aktiv." : "Manuell verifiering är fortsatt aktiv.");
+    if (!selected?.proposalId) {
+      setToast("Skapa och godkänn ett kundupplägg innan du testar utskicket.");
+      return;
+    }
+    if (selected.status !== "approved") {
+      setToast("Godkänn utkastet först. Testleverans använder det godkända e-postinnehållet.");
+      return;
+    }
+    if (!operatorEmail) {
+      setToast("Din operatörsprofil saknar e-post. Logga in igen och försök på nytt.");
+      return;
+    }
+    setTestDeliveryBusy(true);
+    try {
+      await updateProposal(apiBase, token, selected.proposalId, { email_body: emailBody, email_subject: emailSubject });
+      const emailCfg = apiSummary?.providers.email;
+      const canSendSmtp = Boolean(
+        emailCfg?.real_send_enabled && emailCfg?.provider === "smtp_generic" && emailCfg.configured
+      );
+      const delivery = await queueProposalDelivery(
+        apiBase,
+        token,
+        selected.proposalId,
+        canSendSmtp ? "smtp_generic" : "queue",
+        undefined,
+        fromAddress || emailCfg?.from_addresses?.[0],
+        operatorEmail
+      );
+      setToast(
+        delivery.external_sent
+          ? `Testleverans skickad till ${delivery.recipient}.`
+          : `Testleverans köad (${delivery.status}). Verklig e-post kräver smtp_generic på host.`
+      );
+    } catch (error) {
+      setToast(error instanceof Error ? `Testleveransen stoppades: ${error.message}` : "Testleveransen kunde inte genomföras.");
+    } finally {
+      setTestDeliveryBusy(false);
+    }
+  }
+
+  async function saveAutomation(enabled: boolean): Promise<void> {
+    if (!token) {
+      setToast("Logga in för att spara automationspolicy.");
+      return;
+    }
+    try {
+      const policy = await updateProspectingPolicy(apiBase, token, {
+        mode: enabled ? "rules_assisted" : "manual_review",
+        auto_analyze: enabled,
+        auto_generate_proposal: enabled,
+        auto_queue_after_approval: enabled,
+        minimum_score: apiPolicy?.minimum_score ?? 80,
+        daily_delivery_limit: apiPolicy?.daily_delivery_limit ?? 20
+      });
+      setApiPolicy(policy);
+      setAutomationEnabled(policy.mode === "rules_assisted");
+      setAutomationOpen(false);
+      setToast(policy.scheduler_enabled ? "Regelstyrd automation är sparad och schemaläggaren är aktiv." : "Automationsreglerna är sparade. Bakgrundskörning förblir låst tills schemaläggaren aktiveras av operatör.");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Automationspolicyn kunde inte sparas.");
+    }
   }
 
   function selectLead(id: number) {
@@ -1117,33 +1063,37 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
     setDetailTab("analysis");
   }
 
+  if (!sessionToken) {
+    return <NovaLoginGate apiBase={apiBase} onLogin={handleLogin} />;
+  }
+
   return (
-    <div className={`wpa-app ${demoOnly ? "wpa-app--nova-demo" : ""}`}>
+    <div className="wpa-app">
       <aside className={`wpa-sidebar ${sidebarOpen ? "open" : ""}`}>
-        <div className="wpa-brand"><span className="wpa-brand__mark"><Icon name="sparkles" size={19} /></span><div><strong>{demoOnly ? "Nova" : "SalesOS"}</strong><small>{demoOnly ? "Fristående demo" : "Webbprospektering"}</small></div><button aria-label="Stäng meny" onClick={() => setSidebarOpen(false)} type="button"><Icon name="close" /></button></div>
-        <div className="wpa-agent-state"><span className={agentRunning ? "running" : ""}><i /></span><div><strong>Nova</strong><small>{agentRunning ? "Arbetar med ny sökning" : demoOnly ? "Demo online · redo" : "Agent online · redo"}</small></div></div>
+        <div className="wpa-brand"><span className="wpa-brand__mark"><Icon name="sparkles" size={19} /></span><div><strong>Nova</strong><small>Webbprospektering</small></div><button aria-label="Stäng meny" onClick={() => setSidebarOpen(false)} type="button"><Icon name="close" /></button></div>
+        <div className="wpa-agent-state"><span className={agentRunning ? "running" : ""}><i /></span><div><strong>Nova</strong><small>{agentRunning ? "Arbetar med ny sökning" : "Agent online · redo"}</small></div></div>
         <nav className="wpa-nav" aria-label="Huvudnavigation">
           <small>ARBETSFLÖDE</small>
           <a aria-current="page" href={homePath}><Icon name="layout" /> Översikt</a>
-          <button onClick={() => { setFilter("all"); setSidebarOpen(false); }} type="button"><Icon name="building" /> Prospekt <b>{liveSession ? leads.length : leads.length + 9}</b></button>
+          <button onClick={() => { setFilter("all"); setSidebarOpen(false); }} type="button"><Icon name="building" /> Prospekt <b>{leads.length}</b></button>
           <button onClick={() => { setFilter("review"); setSidebarOpen(false); }} type="button"><Icon name="activity" /> Analyser <b>{reviewCount}</b></button>
           <button onClick={() => { setDetailTab("proposal"); setSidebarOpen(false); }} type="button"><Icon name="file" /> Kundförslag</button>
           <button onClick={() => { setFilter("approved"); setSidebarOpen(false); }} type="button"><Icon name="mail" /> Utskick</button>
           <small>HANTERA</small>
           <button onClick={() => setAutomationOpen(true)} type="button"><Icon name="wand" /> Automation <span className="wpa-beta">BETA</span></button>
-          <button onClick={() => setToast("Inställningar är redo för nästa integration.")} type="button"><Icon name="settings" /> Inställningar</button>
+          <button onClick={() => (liveSession ? setSettingsOpen(true) : setToast("Synkronisera arbetsytan först."))} type="button"><Icon name="settings" /> Inställningar</button>
         </nav>
         <div className="wpa-sidebar-policy">
           <div><Icon name={automationEnabled ? "wand" : "shield"} size={18} /><span><strong>{automationEnabled ? "Regelstyrt läge" : "Manuell kontroll"}</strong><small>{automationEnabled ? "Kvalificerade leveranser kan köas" : "Allt verifieras före leverans"}</small></span></div>
           <button onClick={() => setAutomationOpen(true)} type="button">Hantera <Icon name="chevron" size={14} /></button>
         </div>
-        <div className="wpa-sidebar-user"><span>EA</span><div><strong>Erik Andersson</strong><small>Administratör</small></div><button aria-label="Fler användarval" type="button"><Icon name="more" /></button></div>
+        <div className="wpa-sidebar-user"><span>NO</span><div><strong>{operatorEmail || "Operatör"}</strong><small>{liveSession ? "Inloggad" : "Session"}</small></div><button aria-label="Logga ut" onClick={handleLogout} type="button"><Icon name="close" size={14} /></button></div>
       </aside>
       {sidebarOpen ? <button aria-label="Stäng meny" className="wpa-sidebar-scrim" onClick={() => setSidebarOpen(false)} type="button" /> : null}
 
       <main className="wpa-main">
         <header className="wpa-topbar">
-          <div className="wpa-topbar__title"><button aria-label="Öppna meny" className="wpa-mobile-menu" onClick={() => setSidebarOpen(true)} type="button"><Icon name="menu" /></button><div><span>{demoOnly ? "NOVA · FRISTÅENDE DEMO" : liveSession ? "NOVA · LIVE" : "AGENTÖVERSIKT"}</span><h1>{demoOnly ? "Upptäck nästa affärsmöjlighet" : liveSession ? "Webbprospektering" : "God morgon, Erik"}</h1><p>{demoOnly ? <>Nova har hittat <strong>3 nya möjligheter</strong> sedan ditt senaste besök.</> : liveSession ? (apiState === "live_empty" ? "Inga sparade webbplatser ännu. Analysera en publik URL för att skapa evidens, kundupplägg och mötesfilm." : <>Nova har <strong>{leads.length}</strong> sparade möjligheter i den här arbetsytan.</>) : <>Nova har hittat <strong>3 nya möjligheter</strong> sedan ditt senaste besök.</>}</p></div></div>
+          <div className="wpa-topbar__title"><button aria-label="Öppna meny" className="wpa-mobile-menu" onClick={() => setSidebarOpen(true)} type="button"><Icon name="menu" /></button><div><span>{liveSession ? "NOVA · LIVE" : "NOVA"}</span><h1>{liveSession ? "Webbprospektering" : "Nova"}</h1><p>{apiState === "live_empty" ? "Inga sparade webbplatser ännu. Analysera en publik URL för att skapa evidens, kundupplägg och mötesfilm." : liveSession ? <>Nova har <strong>{leads.length}</strong> sparade möjligheter i den här arbetsytan.</> : "Synkroniserar tenant-arbetsytan …"}</p></div></div>
           <div className="wpa-topbar__actions"><label className="wpa-global-search"><Icon name="search" size={17} /><input aria-label="Sök i alla företag" onChange={(event) => setSearch(event.target.value)} placeholder="Sök företag …" value={search} /><kbd>⌘ K</kbd></label><button aria-label="Notiser" className="wpa-notification" type="button"><Icon name="notification" /><i /></button><button className="wpa-button secondary analyze-url" onClick={() => setManualProspectOpen(true)} type="button"><Icon name="globe" size={16} /> Analysera URL</button><button className="wpa-button primary new-search" onClick={() => setCampaignOpen(true)} type="button"><Icon name="plus" size={17} /> Ny sökning</button></div>
         </header>
 
@@ -1151,22 +1101,22 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
           <section className={`wpa-runtime-banner ${apiState}`}>
             <span><Icon name={apiState === "live" || apiState === "live_empty" ? "shield" : "activity"} size={16} /></span>
             <div>
-              <strong>{demoOnly ? "Nova-demo · tryggt isolerad från skarpa data" : apiState === "live" ? "Säker API-session · beständiga data" : apiState === "live_empty" ? "API ansluten · arbetsytan är tom" : apiState === "loading" ? "Kontrollerar SalesOS-session …" : apiState === "error" ? "API kunde inte nås · demodata visas" : "Förhandsvisning med demodata"}</strong>
-              <small>{demoOnly ? "Alla företag och resultat är demodata. Inget sparas, hämtas externt eller skickas." : apiState === "live" ? `${apiSummary?.providers.website_fetch?.enabled ? "Webbanalys aktiverad" : "Webbanalys låst av operatör"} · ${apiSummary?.providers.email?.real_send_enabled ? "verklig e-post aktiverad" : "extern e-post låst"}` : apiState === "live_empty" ? "Lägg till en URL för en källbelagd analys eller starta en kampanj." : apiState === "demo" ? "Logga in via Sales Desk för tenant-isolerad lagring, revisionslogg och verifierad leverans." : "Inga externa åtgärder görs i detta läge."}</small>
+              <strong>{apiState === "live" ? "Säker API-session · beständiga data" : apiState === "live_empty" ? "API ansluten · arbetsytan är tom" : apiState === "loading" ? "Synkroniserar arbetsytan …" : "API kunde inte nås"}</strong>
+              <small>{apiState === "live" ? `${apiSummary?.providers.website_fetch?.enabled ? "Webbanalys aktiverad" : "Webbanalys låst av operatör"} · ${apiSummary?.providers.email?.real_send_enabled ? "verklig e-post aktiverad" : "extern e-post låst"}` : apiState === "live_empty" ? "Lägg till en URL för en källbelagd analys eller starta en kampanj." : apiState === "error" ? "Kontrollera API-anslutningen och försök igen." : "Hämtar policy, prospekt och leverantörsstatus."}</small>
             </div>
-            {demoOnly ? <a href="/">Till SalesOS</a> : apiState === "demo" || apiState === "error" ? <a href="/sales-desk">Logga in</a> : <button onClick={() => void refreshWorkspace(true)} type="button"><Icon name="refresh" size={13} /> Synkronisera</button>}
+            {apiState === "error" ? <button onClick={() => void refreshWorkspace(true)} type="button"><Icon name="refresh" size={13} /> Försök igen</button> : <button onClick={() => void refreshWorkspace(true)} type="button"><Icon name="refresh" size={13} /> Synkronisera</button>}
           </section>
           <section className="wpa-stats" aria-label="Nyckeltal">
-            <article><span className="blue"><Icon name="search" /></span><div><small>Analyserade webbplatser</small><strong>{liveSession ? (apiSummary?.analyzed_sites ?? 0) : (apiSummary?.analyzed_sites ?? 48)}</strong><p><b>{liveSession ? "Sparade" : "+12"}</b> {liveSession ? "i tenant" : "senaste 7 dagarna"}</p></div></article>
-            <article><span className="violet"><Icon name="target" /></span><div><small>Kvalificerade möjligheter</small><strong>{liveSession ? (apiSummary?.qualified_opportunities ?? leads.length) : (apiSummary?.qualified_opportunities ?? leads.length + 9)}</strong><p><b>{liveSession ? leads.length : "29%"}</b> {liveSession ? "visas nu" : "av analyserade"}</p></div></article>
-            <article><span className="amber"><Icon name="clipboard" /></span><div><small>Väntar på granskning</small><strong>{liveSession ? (apiSummary?.awaiting_review ?? reviewCount) : (apiSummary?.awaiting_review ?? reviewCount + 4)}</strong><p>Din åtgärd krävs</p></div></article>
-            <article><span className="green"><Icon name="trend" /></span><div><small>Potentiellt ordervärde</small><strong>{Math.round((liveSession ? (apiSummary?.potential_value_sek ?? totalPipeline) : (apiSummary?.potential_value_sek ?? totalPipeline + 98_000)) / 1000)} tkr</strong><p><b>{liveSession ? "Aktuell" : "+18%"}</b> pipeline</p></div></article>
+            <article><span className="blue"><Icon name="search" /></span><div><small>Analyserade webbplatser</small><strong>{apiSummary?.analyzed_sites ?? 0}</strong><p><b>Sparade</b> i tenant</p></div></article>
+            <article><span className="violet"><Icon name="target" /></span><div><small>Kvalificerade möjligheter</small><strong>{apiSummary?.qualified_opportunities ?? leads.length}</strong><p><b>{leads.length}</b> visas nu</p></div></article>
+            <article><span className="amber"><Icon name="clipboard" /></span><div><small>Väntar på granskning</small><strong>{apiSummary?.awaiting_review ?? reviewCount}</strong><p>Din åtgärd krävs</p></div></article>
+            <article><span className="green"><Icon name="trend" /></span><div><small>Potentiellt ordervärde</small><strong>{Math.round((apiSummary?.potential_value_sek ?? totalPipeline) / 1000)} tkr</strong><p><b>Aktuell</b> pipeline</p></div></article>
           </section>
 
           <section className={`wpa-agent-run ${agentRunning ? "is-running" : ""}`}>
-            <div className="wpa-agent-run__main"><span className="wpa-agent-orb"><Icon name="sparkles" size={21} /></span><div><span>{agentRunning ? "NOVA ARBETAR" : liveSession ? "LIVE-ARBETSYTA" : "AKTIV SÖKNING"}</span><h2>{agentRunning ? "Söker, källkontrollerar och kvalificerar …" : liveSession ? (apiState === "live_empty" ? "Ingen aktiv kampanj" : campaignCriteria) : campaignCriteria}</h2><p>{agentRunning ? "Publika företagsuppgifter → webbplatskontroll → kvalitetspoäng" : liveSession ? (apiSummary?.providers.website_fetch?.enabled ? "Webbanalys är på. Lägg till en URL eller starta en sökning — inget skickas utan godkännande." : "Webbanalys är avstängd av operatörskill-switch. Du kan spara URL:er, men hämtning av HTML är låst.") : "Agenten bevakar 126 företag och prioriterar tydliga förbättringsbehov."}</p></div></div>
+            <div className="wpa-agent-run__main"><span className="wpa-agent-orb"><Icon name="sparkles" size={21} /></span><div><span>{agentRunning ? "NOVA ARBETAR" : "LIVE-ARBETSYTA"}</span><h2>{agentRunning ? "Söker, källkontrollerar och kvalificerar …" : apiState === "live_empty" ? "Ingen aktiv kampanj" : campaignCriteria}</h2><p>{agentRunning ? "Publika företagsuppgifter → webbplatskontroll → kvalitetspoäng" : apiSummary?.providers.website_fetch?.enabled ? "Webbanalys är på. Lägg till en URL eller starta en sökning — inget skickas utan godkännande." : "Webbanalys är avstängd av operatör. Du kan spara URL:er, men hämtning av HTML är låst."}</p></div></div>
             <div className="wpa-flow" aria-label="Agentens arbetsflöde">{[
-              ["search", "Hitta", "126 kontrollerade"], ["target", "Kvalificera", "14 möjligheter"], ["activity", "Analysera", "6 klara"], ["file", "Skapa förslag", "2 utkast"], ["shield", "Verifiera", "Manuellt"]
+              ["search", "Hitta", `${leads.length} sparade`], ["target", "Kvalificera", `${reviewCount} att granska`], ["activity", "Analysera", "Evidens"], ["file", "Skapa förslag", "Versionerat"], ["shield", "Verifiera", "Manuellt"]
             ].map(([icon, label, meta], index) => <div className={index < 3 ? "done" : index === 3 ? "current" : ""} key={label}><span><Icon name={icon as IconName} size={15} /></span><p><strong>{label}</strong><small>{meta}</small></p>{index < 4 ? <i><Icon name="chevron" size={13} /></i> : null}</div>)}</div>
             <button className="wpa-run-action" onClick={() => setCampaignOpen(true)} type="button">Justera sökning <Icon name="settings" size={15} /></button>
             {agentRunning ? <div className="wpa-run-progress"><span /></div> : null}
@@ -1201,7 +1151,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
                   )
                 ) : null}
               </div>
-              <footer className="wpa-table-footer"><span>Senast uppdaterad nyss</span><button onClick={() => setToast("Listan är uppdaterad med senaste agentresultaten.")} type="button"><Icon name="refresh" size={14} /> Uppdatera</button></footer>
+              <footer className="wpa-table-footer"><span>Senast uppdaterad nyss</span><button onClick={() => void refreshWorkspace(true)} type="button"><Icon name="refresh" size={14} /> Uppdatera</button></footer>
             </section>
 
             {selected ? (
@@ -1217,7 +1167,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
                 {detailTab === "analysis" ? <>
                   <section className="wpa-score-summary"><div className="wpa-score-ring" style={{ "--score": `${selected.score * 3.6}deg` } as CSSProperties}><span><strong>{selected.score}</strong><small>/100</small></span></div><div><span>FÖRBÄTTRINGSPOTENTIAL</span><h3>{selected.score >= 80 ? "Stor affärsmöjlighet" : "Tydlig förbättringsmöjlighet"}</h3><p>Högre poäng betyder fler verifierade möjligheter att skapa mätbar effekt.</p></div></section>
                   <section><div className="wpa-subhead"><h3>Teknisk översikt</h3><span>Senast testad idag</span></div><div className="wpa-metrics-grid"><MetricBar label="Prestanda" value={selected.metrics.performance} /><MetricBar label="SEO" value={selected.metrics.seo} /><MetricBar label="Tillgänglighet" value={selected.metrics.accessibility} /><MetricBar label="Mobil" value={selected.metrics.mobile} /></div>{selected.screenshot ? <figure className="wpa-page-screenshot"><img alt={`Mobil skärmbild av ${selected.domain}`} src={selected.screenshot} /><figcaption>Mobil rendering från PageSpeed Insights</figcaption></figure> : null}</section>
-                  <section><div className="wpa-subhead"><h3>Viktigaste observationerna</h3><span>{selected.evidence?.length ? `${selected.evidence.length} källbevis` : "Demoobservationer"}</span></div><div className="wpa-findings">{selected.findings.map((finding) => <article key={finding.title}><span className={finding.severity}><Icon name={finding.icon} size={16} /></span><div><strong>{finding.title}</strong><p>{finding.detail}</p></div><i className={finding.severity} /></article>)}</div>{selected.evidence?.length ? <details className="wpa-evidence"><summary><Icon name="shield" size={14} /> Visa verifierbart källunderlag</summary><div>{selected.evidence.slice(0, 8).map((item) => <article key={item.id}><span>{item.label}</span><code>{typeof item.value === "string" ? item.value || "Saknas" : JSON.stringify(item.value)}</code><a href={item.url} rel="noreferrer" target="_blank">Källa <Icon name="external" size={10} /></a></article>)}</div></details> : null}</section>
+                  <section><div className="wpa-subhead"><h3>Viktigaste observationerna</h3><span>{selected.evidence?.length ? `${selected.evidence.length} källbevis` : "Observationer"}</span></div><div className="wpa-findings">{selected.findings.map((finding) => <article key={finding.title}><span className={finding.severity}><Icon name={finding.icon} size={16} /></span><div><strong>{finding.title}</strong><p>{finding.detail}</p></div><i className={finding.severity} /></article>)}</div>{selected.evidence?.length ? <details className="wpa-evidence"><summary><Icon name="shield" size={14} /> Visa verifierbart källunderlag</summary><div>{selected.evidence.slice(0, 8).map((item) => <article key={item.id}><span>{item.label}</span><code>{typeof item.value === "string" ? item.value || "Saknas" : JSON.stringify(item.value)}</code><a href={item.url} rel="noreferrer" target="_blank">Källa <Icon name="external" size={10} /></a></article>)}</div></details> : null}</section>
                   <section className="wpa-contact"><div className="wpa-subhead"><h3>Beslutsfattare</h3>{selected.contact.verified ? <span className="verified"><Icon name="check" size={12} /> Verifierad</span> : <span>Behöver verifieras</span>}</div><div><span><Icon name="user" /></span><p><strong>{selected.contact.name}</strong><small>{selected.contact.role}</small>{selected.contact.email ? <a href={`mailto:${selected.contact.email}`}>{selected.contact.email}</a> : <small>E-post saknas</small>}</p>{selected.apiId && !selected.contact.verified && selected.contact.email ? <button className="wpa-verify-contact" onClick={() => setContactVerifyOpen(true)} type="button"><Icon name="check" size={11} /> Verifiera</button> : null}</div></section>
                   {selected.apiId ? <section className="wpa-compliance"><div><Icon name="shield" size={15} /><span><strong>Kontaktpolicy</strong><small>{selected.doNotContact ? "Spärrad — inget utskick tillåts" : `Rättslig grund: ${selected.legalBasis || "måste verifieras"}`}</small></span></div><div className="wpa-compliance-actions">{selected.sourceUrl ? <a href={selected.sourceUrl} rel="noreferrer" target="_blank">Ursprungskälla <Icon name="external" size={11} /></a> : null}{selected.contact.email && !selected.doNotContact ? <button onClick={() => void suppressSelectedContact()} type="button">Spärra kontakt</button> : null}</div></section> : null}
                 </> : null}
@@ -1228,7 +1178,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
                   <section className="wpa-meeting-film">
                     <div className="wpa-meeting-film__signal"><span><Icon name="sparkles" size={18} /></span><i /><i /></div>
                     <div><small>NOVA · KUNDANPASSAD MÖTESFILM</small><h3>Gör analysen omöjlig att bläddra förbi.</h3><p>Nio självkörande kapitel med evidens, målbild, affärseffekt och nästa steg. Textning, valfri svensk webbläsarröst, helskärm och möteskontroller ingår.</p></div>
-                    <div className="wpa-meeting-film__actions"><button className="wpa-button primary" onClick={() => void openMeetingPresentation()} type="button"><Icon name="eye" size={15} /> {token && selected.proposalId ? "Starta mötesfilmen" : "Se filmexempel"}</button>{!demoOnly && token ? <button className="wpa-button secondary" onClick={() => setInternalBusinessCaseOpen(true)} type="button"><Icon name="shield" size={14} /> Intern kalkyl</button> : null}</div>
+                    <div className="wpa-meeting-film__actions"><button className="wpa-button primary" onClick={() => void openMeetingPresentation()} type="button"><Icon name="eye" size={15} /> Starta mötesfilmen</button><button className="wpa-button secondary" onClick={() => setInternalBusinessCaseOpen(true)} type="button"><Icon name="shield" size={14} /> Intern kalkyl</button></div>
                   </section>
                   <section><div className="wpa-subhead"><h3>Föreslagen struktur</h3><span>{selected.proposalSitemap?.length || 6} sidor</span></div><div className="wpa-sitemap">{(selected.proposalSitemap || ["Start", "Tjänster", "Projekt", "Om oss", "Kontakt", "Offert"]).map((page) => <span key={page}>{page}</span>)}</div></section>
                   <section><div className="wpa-subhead"><h3>Effekt & effektivisering</h3></div><div className="wpa-benefits">{(selected.proposalBenefits || [{ title: "Fler relevanta leads", detail: "Tydliga erbjudanden och CTA per kundbehov." }, { title: "Mindre manuellt arbete", detail: "Kvalificerande formulär och automatisk mötesbokning." }, { title: "Starkare lokal SEO", detail: "Ortssidor och teknisk struktur som går att mäta." }]).map((benefit, index) => <article key={`${benefit.title}-${index}`}><Icon name={(["trend", "bolt", "search"] as IconName[])[index % 3]} /><div><strong>{benefit.title}</strong><p>{benefit.detail}</p></div></article>)}</div></section>
@@ -1239,16 +1189,16 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
 
                 {detailTab === "email" ? <>
                   <div className="wpa-email-state"><span className={selected.status === "approved" ? "approved" : "draft"}><Icon name={selected.status === "approved" ? "check" : "file"} size={14} /> {selected.status === "approved" ? "Godkänd för leverans" : "Utkast · ej skickat"}</span><small>Senast sparat nyss</small></div>
-                  <section className="wpa-email-compose"><label>Till<div><input readOnly value={`${selected.contact.name} <${selected.contact.email}>`} />{selected.contact.verified ? <span><Icon name="check" size={11} /> Verifierad</span> : null}</div></label>{!demoOnly && (apiSummary?.providers.email?.from_addresses?.length || 0) > 0 ? <label>Avsändare<select onChange={(event) => setFromAddress(event.target.value)} value={fromAddress || apiSummary?.providers.email?.from_addresses?.[0] || ""}>{(apiSummary?.providers.email?.from_addresses || []).map((address) => <option key={address} value={address}>{address}</option>)}</select></label> : null}<label>Ämne<input onChange={(event) => setEmailSubject(event.target.value)} value={emailSubject} /></label><label>Meddelande<textarea onChange={(event) => setEmailBody(event.target.value)} rows={16} value={emailBody} /></label></section>
+                  <section className="wpa-email-compose"><label>Till<div><input readOnly value={`${selected.contact.name} <${selected.contact.email}>`} />{selected.contact.verified ? <span><Icon name="check" size={11} /> Verifierad</span> : null}</div></label>{(apiSummary?.providers.email?.from_addresses?.length || 0) > 0 ? <label>Avsändare<select onChange={(event) => setFromAddress(event.target.value)} value={fromAddress || apiSummary?.providers.email?.from_addresses?.[0] || ""}>{(apiSummary?.providers.email?.from_addresses || []).map((address) => <option key={address} value={address}>{address}</option>)}</select></label> : null}<label>Ämne<input onChange={(event) => setEmailSubject(event.target.value)} value={emailSubject} /></label><label>Meddelande<textarea onChange={(event) => setEmailBody(event.target.value)} rows={16} value={emailBody} /></label></section>
                   <section className="wpa-attachment"><span><Icon name="file" /></span><div><strong>Analys, kundupplägg & mötesfilm</strong><small>Personlig webblänk · kundanpassad · självkörande presentation</small></div><button onClick={() => setDetailTab("proposal")} type="button"><Icon name="eye" size={15} /> Förhandsvisa</button></section>
-                  <div className="wpa-email-note"><Icon name="shield" size={16} /><span>{demoOnly ? "Utskicket levereras inte förrän en person har granskat och godkänt det." : apiSummary?.providers.email?.real_send_enabled && apiSummary.providers.email.provider === "smtp_generic" ? "Efter godkännande skickas mailet från den valda avsändaren. Kill-switch och spärrlista gäller." : "Utskicket köas lokalt tills smtp_generic och kill-switch är på efter dual approval."}</span></div>
+                  <div className="wpa-email-note"><Icon name="shield" size={16} /><span>{apiSummary?.providers.email?.real_send_enabled && apiSummary.providers.email.provider === "smtp_generic" ? "Efter godkännande skickas mailet från den valda avsändaren. Kill-switch och spärrlista gäller." : "Utskicket köas tills smtp_generic och kill-switch är aktiverade på host."}</span></div>
                 </> : null}
               </div>
 
               <footer className="wpa-detail-footer">
                 {detailTab === "analysis" ? <><button className="wpa-button secondary" onClick={analyzeSelected} type="button"><Icon name="refresh" size={15} /> Analysera igen</button><button className="wpa-button primary" disabled={selected.status === "analyzing"} onClick={createProposal} type="button"><Icon name="sparkles" size={15} /> {selected.status === "analyzing" ? "Analyserar …" : "Skapa kundupplägg"}</button></> : null}
                 {detailTab === "proposal" ? <><button className="wpa-button secondary" onClick={selected.status === "approved" ? () => void createProposal() : () => setProposalEditorOpen(true)} type="button"><Icon name={selected.status === "approved" ? "plus" : "file"} size={15} /> {selected.status === "approved" ? "Skapa ny version" : "Redigera upplägg"}</button><button className="wpa-button primary" onClick={() => setDetailTab("email")} type="button">Skapa e-post <Icon name="arrow" size={15} /></button></> : null}
-                {detailTab === "email" ? <><button className="wpa-button secondary" onClick={() => setToast("Testleverans simulerad — ingen extern e-post skickades i demoläget.")} type="button">Skicka test till mig</button><button className={`wpa-button primary ${selected.status === "approved" ? "approved" : ""}`} disabled={selected.doNotContact || !selected.contact.email} onClick={() => setReviewOpen(true)} type="button"><Icon name={selected.status === "approved" ? "check" : "shield"} size={15} /> {selected.status === "approved" ? "Visa verifiering" : "Granska & godkänn"}</button></> : null}
+                {detailTab === "email" ? <><button className="wpa-button secondary" disabled={testDeliveryBusy} onClick={() => void sendTestDelivery()} type="button">{testDeliveryBusy ? "Skickar test …" : "Skicka test till mig"}</button><button className={`wpa-button primary ${selected.status === "approved" ? "approved" : ""}`} disabled={selected.doNotContact || !selected.contact.email} onClick={() => setReviewOpen(true)} type="button"><Icon name={selected.status === "approved" ? "check" : "shield"} size={15} /> {selected.status === "approved" ? "Visa verifiering" : "Granska & godkänn"}</button></> : null}
               </footer>
             </aside>
             ) : (
@@ -1256,7 +1206,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
               <div className="wpa-empty wpa-empty--live">
                 <Icon name="globe" />
                 <strong>Börja med en publik webbplats</strong>
-                <p>Live-läget visar bara sparade, tenant-isolerade prospekt. Demoföretag visas inte här.</p>
+                <p>Sparade, tenant-isolerade prospekt visas här efter analys eller import.</p>
                 <button className="wpa-button primary" onClick={() => setManualProspectOpen(true)} type="button"><Icon name="plus" size={15} /> Analysera URL</button>
               </div>
             </aside>
@@ -1272,6 +1222,7 @@ export function WebsiteProspectAgent({ demoOnly = false }: WebsiteProspectAgentP
       {internalBusinessCaseOpen && selected ? <InternalBusinessCaseModal lead={selected} onClose={() => setInternalBusinessCaseOpen(false)} /> : null}
       {reviewOpen && selected ? <ReviewModal lead={selected} onApprove={approveDelivery} onClose={() => setReviewOpen(false)} /> : null}
       {automationOpen ? <AutomationModal onClose={() => setAutomationOpen(false)} onSave={(enabled) => void saveAutomation(enabled)} /> : null}
+      {settingsOpen ? <ProviderSettingsModal onClose={() => setSettingsOpen(false)} onOpenAutomation={() => { setSettingsOpen(false); setAutomationOpen(true); }} policy={apiPolicy} summary={apiSummary} /> : null}
       {toast ? <div aria-live="polite" className="wpa-toast"><span><Icon name="check" size={15} /></span>{toast}<button aria-label="Stäng" onClick={() => setToast(null)} type="button"><Icon name="close" size={14} /></button></div> : null}
     </div>
   );

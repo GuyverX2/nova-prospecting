@@ -54,13 +54,13 @@ const SCENES: Scene[] = [
     id: "live",
     eyebrow: "Efter filmen",
     title: "Se agenten på riktigt.",
-    caption: "Det ni öppnar sedan är den faktiska, kontrollerade Nova-demon — inte en tillrättalagd film."
+    caption: "Det ni öppnar sedan är den live Nova-arbetsytan — inte en tillrättalagd film."
   },
   {
     id: "closing",
     eyebrow: "Nova",
     title: "Nästa möjlighet, med evidens.",
-    caption: "Öppna Nova-demon och ta fram nästa möjlighet med underlag, mandat och nästa steg på samma skärm."
+    caption: "Öppna Nova och ta fram nästa möjlighet med underlag, mandat och nästa steg på samma skärm."
   }
 ];
 
@@ -409,7 +409,7 @@ export function NovaPresentation() {
                 ? "Berättarrösten kunde inte laddas — kontrollera nätverket"
                 : "Laddar berättarröst…"}
           </p>
-          <a className="presentationStart__skip" href="/nova">Gå direkt till Nova-demon</a>
+          <a className="presentationStart__skip" href="/nova">Gå direkt till Nova</a>
         </section>
       ) : (
         <>
@@ -429,7 +429,7 @@ export function NovaPresentation() {
               <span className="presentationKicker">{scene.eyebrow}</span>
               <h1 id="nova-title">{scene.title}</h1>
               {scene.id === "live" ? <div className="presentationTruthTag"><i />Kontrollerad pilot i dag</div> : null}
-              {scene.id === "closing" ? <a className="presentationCta" href="/nova">Öppna Nova-demon <span>→</span></a> : null}
+              {scene.id === "closing" ? <a className="presentationCta" href="/nova">Öppna Nova <span>→</span></a> : null}
             </div>
             <div className="presentationStage__visual"><SceneVisual id={scene.id} /></div>
           </section>

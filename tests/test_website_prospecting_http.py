@@ -272,3 +272,36 @@ def test_share_security_duplicate_delivery_and_daily_limit():
         assert expired.status_code == expired_film.status_code == 404
         assert "SHARE_NOT_FOUND" in expired.text
         assert "SHARE_NOT_FOUND" in expired_film.text
+
+
+def test_test_recipient_delivery_bypasses_duplicate_and_daily_limit():
+    with _workspace() as (client, _, admin_a, *_):
+        headers = _headers(admin_a)
+        _, proposal_id = _approved_proposal(
+            client,
+            headers,
+            name="Testleverans AB",
+            domain="testleverans.example.se",
+            email="kontakt@testleverans.example.se",
+        )
+        first = client.post(
+            f"{BASE}/proposals/{proposal_id}/deliver",
+            headers=headers,
+            json={"provider": "queue", "test_recipient": admin_a.email},
+        )
+        assert first.status_code == 200
+        assert first.json()["recipient"] == admin_a.email
+        assert first.json()["external_sent"] is False
+        second = client.post(
+            f"{BASE}/proposals/{proposal_id}/deliver",
+            headers=headers,
+            json={"provider": "queue", "test_recipient": admin_a.email},
+        )
+        assert second.status_code == 200
+        wrong_recipient = client.post(
+            f"{BASE}/proposals/{proposal_id}/deliver",
+            headers=headers,
+            json={"provider": "queue", "test_recipient": "other@example.invalid"},
+        )
+        assert wrong_recipient.status_code == 403
+        assert "TEST_RECIPIENT_FORBIDDEN" in wrong_recipient.text
