@@ -304,6 +304,30 @@ def create_prospect(db: Session, ctx: TenantContext, user: User, payload: Prospe
     return prospect_dict(db, row)
 
 
+def _latest_maps(db: Session, tenant_id: int, prospect_ids: list[str]) -> tuple[dict[str, WebsiteAnalysis], dict[str, WebsiteProposal]]:
+    if not prospect_ids:
+        return {}, {}
+    analyses = (
+        db.query(WebsiteAnalysis)
+        .filter(WebsiteAnalysis.tenant_id == tenant_id, WebsiteAnalysis.prospect_id.in_(prospect_ids))
+        .order_by(WebsiteAnalysis.created_at.desc())
+        .all()
+    )
+    proposals = (
+        db.query(WebsiteProposal)
+        .filter(WebsiteProposal.tenant_id == tenant_id, WebsiteProposal.prospect_id.in_(prospect_ids))
+        .order_by(WebsiteProposal.version.desc())
+        .all()
+    )
+    analysis_map: dict[str, WebsiteAnalysis] = {}
+    for row in analyses:
+        analysis_map.setdefault(row.prospect_id, row)
+    proposal_map: dict[str, WebsiteProposal] = {}
+    for row in proposals:
+        proposal_map.setdefault(row.prospect_id, row)
+    return analysis_map, proposal_map
+
+
 def list_prospects(db: Session, ctx: TenantContext, *, status: str | None = None, search: str | None = None, limit: int = 100) -> list[dict]:
     query = db.query(WebsiteProspect).filter(WebsiteProspect.tenant_id == ctx.tenant_id)
     if status:
@@ -312,7 +336,16 @@ def list_prospects(db: Session, ctx: TenantContext, *, status: str | None = None
         term = f"%{search.strip().lower()}%"
         query = query.filter(func.lower(WebsiteProspect.company_name).like(term) | func.lower(WebsiteProspect.normalized_domain).like(term))
     rows = query.order_by(WebsiteProspect.qualification_score.desc(), WebsiteProspect.created_at.desc()).limit(limit).all()
-    return [prospect_dict(db, row, include_latest=False) for row in rows]
+    analysis_map, proposal_map = _latest_maps(db, ctx.tenant_id, [row.id for row in rows])
+    listed: list[dict] = []
+    for row in rows:
+        payload = prospect_dict(db, row, include_latest=False)
+        analysis = analysis_map.get(row.id)
+        proposal = proposal_map.get(row.id)
+        payload["latest_analysis"] = analysis_dict(analysis) if analysis else None
+        payload["latest_proposal"] = proposal_dict(proposal) if proposal else None
+        listed.append(payload)
+    return listed
 
 
 def require_prospect(db: Session, ctx: TenantContext, prospect_id: str) -> WebsiteProspect:

@@ -6,6 +6,10 @@ cat <<'EOF'
 # Nova website prospecting — H8c (dual_valid NOVA-SMTP-GENERIC-HOST-20260817)
 # Live workspace: https://salesos.se/nova
 # Legacy /website-agent redirects to /nova in the SPA bootstrap.
+#
+# Staged live path: enable FETCH first (make print-nova-fetch-env), smoke one
+# own public URL, THEN paste SMTP + kill switch. Do not enable real send
+# before fetch works. Secrets never in git/chat.
 
 PROSPECTING_FETCH_ENABLED=true
 PROSPECTING_DISCOVERY_PROVIDER=disabled

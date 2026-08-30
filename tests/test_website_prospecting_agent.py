@@ -32,6 +32,7 @@ from app.prospecting.service import (
     deliver_proposal,
     generate_proposal,
     get_policy,
+    list_prospects,
     public_opt_out,
     public_proposal,
     render_proposal_html,
@@ -245,6 +246,34 @@ def test_duplicate_domain_is_rejected_per_tenant():
         assert exc.code == "PROSPECT_DOMAIN_DUPLICATE"
     else:
         raise AssertionError("Duplicate domain should be rejected")
+
+
+def test_list_prospects_includes_latest_analysis_and_proposal():
+    db, ctx, user = _db_and_context()
+    prospect = create_prospect(
+        db,
+        ctx,
+        user,
+        ProspectCreate(company_name="Exempel Bygg AB", website_url="https://example.org/"),
+        request_id="req-list-prospect",
+    )
+    analysis = run_analysis(
+        db,
+        ctx,
+        user,
+        prospect["id"],
+        AnalysisRequest(html_snapshot=HTML),
+        request_id="req-list-analysis",
+    )
+    proposal = generate_proposal(db, ctx, user, prospect["id"], analysis["id"], request_id="req-list-proposal")
+    listed = list_prospects(db, ctx)
+    assert len(listed) == 1
+    assert listed[0]["id"] == prospect["id"]
+    assert listed[0]["latest_analysis"] is not None
+    assert listed[0]["latest_analysis"]["id"] == analysis["id"]
+    assert listed[0]["latest_analysis"]["status"] == "complete"
+    assert listed[0]["latest_proposal"] is not None
+    assert listed[0]["latest_proposal"]["id"] == proposal["id"]
 
 
 def test_pagespeed_enrichment_is_bounded_and_maps_lighthouse(monkeypatch):

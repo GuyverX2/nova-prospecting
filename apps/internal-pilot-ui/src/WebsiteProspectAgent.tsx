@@ -10,6 +10,7 @@ import {
   generateProposal,
   loadProposalPresentation,
   loadProspectingWorkspace,
+  ProspectingApiError,
   queueProposalDelivery,
   suppressProspect,
   updateProposal,
@@ -168,6 +169,22 @@ function formatSek(value: number): string {
   return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK", maximumFractionDigits: 0 }).format(value);
 }
 
+function operatorErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ProspectingApiError) {
+    if (error.code === "WEBSITE_FETCH_DISABLED") {
+      return "Webbhämtning är avstängd på servern. Operatör sätter PROSPECTING_FETCH_ENABLED efter egress-kontroll.";
+    }
+    if (error.code === "DISCOVERY_PROVIDER_DISABLED" || error.code === "DISCOVERY_PROVIDER_NOT_CONFIGURED") {
+      return "Sökning via Places är avstängd. Använd Analysera URL för ett skarpt case.";
+    }
+    if (error.code === "REAL_EMAIL_DISABLED") {
+      return "Verklig e-post är avstängd. Utskicket köas tills H8c är applicerad på host.";
+    }
+    return error.message;
+  }
+  return error instanceof Error ? error.message : fallback;
+}
+
 function statusClass(status: LeadStatus): string {
   if (status === "approved") return "success";
   if (status === "analysis_ready" || status === "proposal_ready") return "review";
@@ -311,10 +328,12 @@ function CampaignModal({ onClose, onStart }: { onClose: () => void; onStart: (cr
 
 function ManualProspectModal({
   busy,
+  fetchEnabled,
   onClose,
   onCreate
 }: {
   busy: boolean;
+  fetchEnabled: boolean;
   onClose: () => void;
   onCreate: (payload: { company_name: string; website_url: string; contact_name: string; contact_email: string; city: string; legitimate_interest_note: string }) => void;
 }) {
@@ -644,6 +663,8 @@ export function WebsiteProspectAgent() {
 
   const selected = leads.find((lead) => lead.id === selectedId) ?? leads[0];
   const liveSession = Boolean(token) && (apiState === "live" || apiState === "live_empty");
+  const fetchEnabled = Boolean(apiSummary?.providers.website_fetch?.enabled);
+  const discoveryConfigured = Boolean(apiSummary?.providers.discovery?.configured);
 
   async function refreshWorkspace(showMessage = false): Promise<void> {
     if (!token) {
@@ -747,6 +768,11 @@ export function WebsiteProspectAgent() {
   const reviewCount = leads.filter((lead) => ["analysis_ready", "proposal_ready"].includes(lead.status)).length;
 
   async function startCampaign(criteria: string) {
+    if (!discoveryConfigured) {
+      setCampaignOpen(false);
+      setToast("Sökning via Places är avstängd. Använd Analysera URL för ett skarpt case.");
+      return;
+    }
     setCampaignOpen(false);
     setCampaignCriteria(criteria);
     setAgentRunning(true);
@@ -768,7 +794,7 @@ export function WebsiteProspectAgent() {
         await refreshWorkspace();
         setToast(`${result.created.length} nya företag sparades från ${result.provider}.`);
       } catch (error) {
-        setToast(error instanceof Error ? `Kampanjen sparades, men sökningen stoppades: ${error.message}` : "Sökningen kunde inte genomföras.");
+        setToast(operatorErrorMessage(error, "Sökningen kunde inte genomföras."));
       } finally {
         setAgentRunning(false);
       }
@@ -780,6 +806,10 @@ export function WebsiteProspectAgent() {
 
   async function analyzeSelected() {
     if (!selected) return;
+    if (!fetchEnabled) {
+      setToast("Webbhämtning är avstängd på servern. Operatör sätter PROSPECTING_FETCH_ENABLED efter egress-kontroll.");
+      return;
+    }
     setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: "analyzing", updated: "Analyseras nu" } : lead));
     setToast(`Agenten analyserar ${selected.domain} …`);
     if (token && selected.apiId) {
@@ -802,7 +832,7 @@ export function WebsiteProspectAgent() {
         setToast(`Analysen är klar med ${analysis.evidence.length} källbevis.`);
       } catch (error) {
         setLeads((current) => current.map((lead) => lead.id === selected.id ? { ...lead, status: "qualified", updated: "Analys stoppad" } : lead));
-        setToast(error instanceof Error ? `Analysen stoppades säkert: ${error.message}` : "Analysen kunde inte genomföras.");
+        setToast(operatorErrorMessage(error, "Analysen kunde inte genomföras."));
       }
       return;
     }
@@ -941,13 +971,19 @@ export function WebsiteProspectAgent() {
       setLeads((current) => [lead, ...current.filter((item) => item.apiId !== prospect.id)]);
       setSelectedId(lead.id);
       setDetailTab("analysis");
+      if (!fetchEnabled) {
+        await refreshWorkspace();
+        setSelectedId(lead.id);
+        setToast("Prospektet är sparat. Webbhämtning är avstängd — analysen startar när fetch är på.");
+        return;
+      }
       setToast("Prospektet är sparat. Den säkra webbplatsanalysen startar …");
       const analysis = await analyzeProspect(apiBase, token, prospect.id, true);
       await refreshWorkspace();
       setSelectedId(lead.id);
       setToast(`Analysen är klar med ${analysis.evidence.length} verifierbara källbevis.`);
     } catch (error) {
-      setToast(error instanceof Error ? `Åtgärden stoppades: ${error.message}` : "Webbplatsen kunde inte analyseras.");
+      setToast(operatorErrorMessage(error, "Webbplatsen kunde inte analyseras."));
     } finally {
       setManualProspectBusy(false);
     }
@@ -1094,7 +1130,7 @@ export function WebsiteProspectAgent() {
       <main className="wpa-main">
         <header className="wpa-topbar">
           <div className="wpa-topbar__title"><button aria-label="Öppna meny" className="wpa-mobile-menu" onClick={() => setSidebarOpen(true)} type="button"><Icon name="menu" /></button><div><span>{liveSession ? "NOVA · LIVE" : "NOVA"}</span><h1>{liveSession ? "Webbprospektering" : "Nova"}</h1><p>{apiState === "live_empty" ? "Inga sparade webbplatser ännu. Analysera en publik URL för att skapa evidens, kundupplägg och mötesfilm." : liveSession ? <>Nova har <strong>{leads.length}</strong> sparade möjligheter i den här arbetsytan.</> : "Synkroniserar tenant-arbetsytan …"}</p></div></div>
-          <div className="wpa-topbar__actions"><label className="wpa-global-search"><Icon name="search" size={17} /><input aria-label="Sök i alla företag" onChange={(event) => setSearch(event.target.value)} placeholder="Sök företag …" value={search} /><kbd>⌘ K</kbd></label><button aria-label="Notiser" className="wpa-notification" type="button"><Icon name="notification" /><i /></button><button className="wpa-button secondary analyze-url" onClick={() => setManualProspectOpen(true)} type="button"><Icon name="globe" size={16} /> Analysera URL</button><button className="wpa-button primary new-search" onClick={() => setCampaignOpen(true)} type="button"><Icon name="plus" size={17} /> Ny sökning</button></div>
+          <div className="wpa-topbar__actions"><label className="wpa-global-search"><Icon name="search" size={17} /><input aria-label="Sök i alla företag" onChange={(event) => setSearch(event.target.value)} placeholder="Sök företag …" value={search} /><kbd>⌘ K</kbd></label><button aria-label="Notiser" className="wpa-notification" type="button"><Icon name="notification" /><i /></button><button className="wpa-button secondary analyze-url" onClick={() => setManualProspectOpen(true)} type="button"><Icon name="globe" size={16} /> Analysera URL</button><button className="wpa-button primary new-search" disabled={!discoveryConfigured} onClick={() => setCampaignOpen(true)} title={discoveryConfigured ? undefined : "Places är avstängt. Använd Analysera URL."} type="button"><Icon name="plus" size={17} /> Ny sökning</button></div>
         </header>
 
         <div className="wpa-content">
@@ -1118,7 +1154,7 @@ export function WebsiteProspectAgent() {
             <div className="wpa-flow" aria-label="Agentens arbetsflöde">{[
               ["search", "Hitta", `${leads.length} sparade`], ["target", "Kvalificera", `${reviewCount} att granska`], ["activity", "Analysera", "Evidens"], ["file", "Skapa förslag", "Versionerat"], ["shield", "Verifiera", "Manuellt"]
             ].map(([icon, label, meta], index) => <div className={index < 3 ? "done" : index === 3 ? "current" : ""} key={label}><span><Icon name={icon as IconName} size={15} /></span><p><strong>{label}</strong><small>{meta}</small></p>{index < 4 ? <i><Icon name="chevron" size={13} /></i> : null}</div>)}</div>
-            <button className="wpa-run-action" onClick={() => setCampaignOpen(true)} type="button">Justera sökning <Icon name="settings" size={15} /></button>
+            <button className="wpa-run-action" disabled={!discoveryConfigured} onClick={() => setCampaignOpen(true)} title={discoveryConfigured ? undefined : "Places är avstängt. Använd Analysera URL."} type="button">Justera sökning <Icon name="settings" size={15} /></button>
             {agentRunning ? <div className="wpa-run-progress"><span /></div> : null}
           </section>
 
@@ -1196,7 +1232,7 @@ export function WebsiteProspectAgent() {
               </div>
 
               <footer className="wpa-detail-footer">
-                {detailTab === "analysis" ? <><button className="wpa-button secondary" onClick={analyzeSelected} type="button"><Icon name="refresh" size={15} /> Analysera igen</button><button className="wpa-button primary" disabled={selected.status === "analyzing"} onClick={createProposal} type="button"><Icon name="sparkles" size={15} /> {selected.status === "analyzing" ? "Analyserar …" : "Skapa kundupplägg"}</button></> : null}
+                {detailTab === "analysis" ? <><button className="wpa-button secondary" disabled={!fetchEnabled} onClick={analyzeSelected} title={fetchEnabled ? undefined : "Webbhämtning avstängd"} type="button"><Icon name="refresh" size={15} /> Analysera igen</button><button className="wpa-button primary" disabled={selected.status === "analyzing"} onClick={createProposal} type="button"><Icon name="sparkles" size={15} /> {selected.status === "analyzing" ? "Analyserar …" : "Skapa kundupplägg"}</button></> : null}
                 {detailTab === "proposal" ? <><button className="wpa-button secondary" onClick={selected.status === "approved" ? () => void createProposal() : () => setProposalEditorOpen(true)} type="button"><Icon name={selected.status === "approved" ? "plus" : "file"} size={15} /> {selected.status === "approved" ? "Skapa ny version" : "Redigera upplägg"}</button><button className="wpa-button primary" onClick={() => setDetailTab("email")} type="button">Skapa e-post <Icon name="arrow" size={15} /></button></> : null}
                 {detailTab === "email" ? <><button className="wpa-button secondary" disabled={testDeliveryBusy} onClick={() => void sendTestDelivery()} type="button">{testDeliveryBusy ? "Skickar test …" : "Skicka test till mig"}</button><button className={`wpa-button primary ${selected.status === "approved" ? "approved" : ""}`} disabled={selected.doNotContact || !selected.contact.email} onClick={() => setReviewOpen(true)} type="button"><Icon name={selected.status === "approved" ? "check" : "shield"} size={15} /> {selected.status === "approved" ? "Visa verifiering" : "Granska & godkänn"}</button></> : null}
               </footer>
@@ -1216,7 +1252,7 @@ export function WebsiteProspectAgent() {
       </main>
 
       {campaignOpen ? <CampaignModal onClose={() => setCampaignOpen(false)} onStart={(criteria) => void startCampaign(criteria)} /> : null}
-      {manualProspectOpen ? <ManualProspectModal busy={manualProspectBusy} onClose={() => setManualProspectOpen(false)} onCreate={(payload) => void createAndAnalyzeManualProspect(payload)} /> : null}
+      {manualProspectOpen ? <ManualProspectModal busy={manualProspectBusy} fetchEnabled={fetchEnabled} onClose={() => setManualProspectOpen(false)} onCreate={(payload) => void createAndAnalyzeManualProspect(payload)} /> : null}
       {contactVerifyOpen && selected ? <ContactVerificationModal busy={contactVerifyBusy} lead={selected} onClose={() => setContactVerifyOpen(false)} onVerify={(source) => void verifySelectedContact(source)} /> : null}
       {proposalEditorOpen && selected ? <ProposalEditorModal busy={proposalEditorBusy} lead={selected} onClose={() => setProposalEditorOpen(false)} onSave={(payload) => void saveProposalContent(payload)} /> : null}
       {internalBusinessCaseOpen && selected ? <InternalBusinessCaseModal lead={selected} onClose={() => setInternalBusinessCaseOpen(false)} /> : null}
