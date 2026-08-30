@@ -40,8 +40,22 @@ make smoke-nova-smtp ENV_FILE=/opt/salesos/.env
 
 ## CRM outbound (G4)
 
-CRM-kanaler (`tenant_invite`, `lead_confirm`, …) använder **`SALESOS_OUTBOUND_EMAIL_*`** (`smtp_generic` i nuvarande dual).  
-Kill switch default **off**. Resend för CRM är **inte** inkopplat ännu — behåll G4-paketet tills provider utökas med ny dual.
+CRM-kanaler (`tenant_invite`, `password_reset`, `quote_share`, `lead_confirm`) använder **`SALESOS_OUTBOUND_EMAIL_*`**. Kill switch default **off** (G4/M4 dual + host env krävs innan enable).
+
+Från och med 2026-08-30 stöds **både** `smtp_generic` och `resend` i CRM-motorn
+(`services/api/app/comms_email/service.py`), så samma Resend-konto/API-nyckel som Nova kan återanvändas:
+
+```bash
+SALESOS_OUTBOUND_EMAIL_PROVIDER=resend
+SALESOS_OUTBOUND_EMAIL_ENABLED=false        # håll false tills G4-testplan PASS
+SALESOS_OUTBOUND_EMAIL_API_KEY=<samma host secret som Nova om samma konto>
+SALESOS_OUTBOUND_EMAIL_FROM=no-reply@salesos.se   # måste vara verifierad From/domän i Resend
+SALESOS_OUTBOUND_EMAIL_CHANNELS=tenant_invite,password_reset,quote_share
+SALESOS_PUBLIC_BASE_URL=https://salesos.se
+```
+
+Alternativt `SALESOS_OUTBOUND_EMAIL_PROVIDER=smtp_generic` och peka `SALESOS_OUTBOUND_EMAIL_HOST` på
+`smpt.resend.com` (Resends SMTP-relay) med samma domänverifiering — ingen API-nyckel behövs då.
 
 ## STOP
 
