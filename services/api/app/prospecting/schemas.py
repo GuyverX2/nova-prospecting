@@ -195,6 +195,26 @@ class ProposalItem(BaseModel):
     updated_at: datetime
 
 
+class ProspectPromoteRequest(BaseModel):
+    """Nova → CRM handoff (N1-1). Creates customer + lead + case; never sends email."""
+
+    vertical_id: str = Field(..., min_length=1, max_length=120)
+    brand_id: str = Field(..., min_length=1, max_length=120)
+    include_contact_email: bool = False
+    case_title: str | None = Field(None, min_length=2, max_length=300)
+
+
+class ProspectPromoteResult(BaseModel):
+    prospect_id: str
+    customer_id: int
+    lead_id: int
+    case_id: int
+    already_promoted: bool = False
+    evidence_analysis_id: str | None = None
+    crm_lead_path: str
+    crm_case_path: str
+
+
 class ShareCreate(BaseModel):
     expires_in_days: int = Field(14, ge=1, le=90)
 

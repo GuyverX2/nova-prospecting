@@ -25,7 +25,7 @@ Nova är **byggt som styrd produkt** (login, tenant-API, evidensanalys, mötesfi
 | Human approve + suppression | ✅ Live i kod | Krävs före leverans; one-click opt-out |
 | Riktig e-post (H8c) | 🟡 Dual **valid**, kod unlocked, **host env inte applicerad** | Kill switch `PROSPECTING_REAL_EMAIL_ENABLED=false` |
 | CRM outbound (G4) | 🟡 Kod (hooks) på main, **inte enabled** | Separat från Nova; `SALESOS_OUTBOUND_EMAIL_ENABLED=false` |
-| CRM-handoff (prospect → lead/case) | 🔴 Saknas | Nova är en silo mot Sales Desk / Kundzon |
+| CRM-handoff (prospect → lead/case) | 🟡 N1-1 API `POST …/prospects/{id}/promote` @ 2026-08-30 | UI-kort = N1-2 |
 | Sequences / follow-up | 🔴 Medvetet STOP | Marknaden har detta dag 1 |
 | Bakgrundsworker | 🔴 `AGENT_SCHEDULER_ENABLED=false` | Policy kan sparas; inget körs |
 | E2E / i18n | 🔴 | Statiska UI-lås + 12 pytest; ingen Playwright; SV hårdkodat |
@@ -150,7 +150,7 @@ Detta är “färdig” i runbookens mening. Ingen ny produktkategori.
 
 | ID | Åtgärd | Varför | Insats | Ägare | STOP |
 |----|--------|--------|--------|-------|------|
-| **N1-1** | **Handoff Nova → CRM:** `POST …/prospects/{id}/promote` skapar SalesDesk/CRM-lead + case under samma tenant/profile, med evidenslänk, utan att kopiera e-post till seed | HubSpot vinner för att prospecting *är* CRM. Nova är silo idag (ingen `prospect`-referens utanför `app/prospecting/`) | M | dev | Ingen auto-send. Ingen PII i fixtures. |
+| **N1-1** | **Handoff Nova → CRM:** `POST …/prospects/{id}/promote` skapar SalesDesk/CRM-lead + case under samma tenant/profile, med evidenslänk, utan att kopiera e-post till seed | HubSpot vinner för att prospecting *är* CRM. Nova är silo idag (ingen `prospect`-referens utanför `app/prospecting/`) | M | dev | Ingen auto-send. Ingen PII i fixtures. **API+tests @ 2026-08-30** (`guyverx2/nova-crm-promote-n1-1`); UI = N1-2 |
 | **N1-2** | Visa Nova-kort på Kundzon-lead/360 och Sales Desk case (“öppna analys / film / share”) | Säljaren ska inte byta app | S–M | dev | Read-only först |
 | **N1-3** | **CSV/manual bulk intake** (UI + API, ≤ N rader, same dedupe) — Places kan vänta | Clay/Apollo startar med lista; Places-nyckel är betald och operator-gated | S | dev | Ingen directory-scrape |
 | **N1-4** | Google Places enable *efter* N0-2: nyckel på host, `PROSPECTING_DISCOVERY_PROVIDER=google_places`, kampanj-limit, kostnadstelemetri (A-6-mönster) | Kampanjknappen är död utan provider (409 `DISCOVERY_PROVIDER_DISABLED`) | S | ops + dual om betald | Fail-closed om nyckel saknas |

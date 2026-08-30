@@ -12,8 +12,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.models.sales_desk import SalesDeskCase, SalesDeskCustomer, SalesDeskLead
 from app.models.user import User
 from app.prospecting.analyzer import WebsiteAuditError, analyze_html, fetch_public_html, normalize_public_url
+from app.schemas.sales_desk import CaseStatus, LeadStatus, SalesDeskPriority
 from app.prospecting.discovery import DiscoveryProviderError, discover_companies, provider_status
 from app.prospecting.models import (
     ProspectSuppression,
@@ -40,6 +42,7 @@ from app.prospecting.schemas import (
     CampaignCreate,
     DeliveryRequest,
     ProspectCreate,
+    ProspectPromoteRequest,
     ProspectUpdate,
     ProspectingPolicyUpdate,
     ProposalReview,
@@ -353,6 +356,152 @@ def require_prospect(db: Session, ctx: TenantContext, prospect_id: str) -> Websi
     if row is None:
         raise ProspectingError(404, "Prospect not found", code="PROSPECT_NOT_FOUND")
     return row
+
+
+def _crm_lead_source(prospect_id: str) -> str:
+    return f"prospecting:{prospect_id}"
+
+
+def _latest_complete_analysis_id(db: Session, tenant_id: int, prospect_id: str) -> str | None:
+    row = (
+        db.query(WebsiteAnalysis)
+        .filter(
+            WebsiteAnalysis.tenant_id == tenant_id,
+            WebsiteAnalysis.prospect_id == prospect_id,
+            WebsiteAnalysis.status == "complete",
+        )
+        .order_by(WebsiteAnalysis.created_at.desc())
+        .first()
+    )
+    return row.id if row else None
+
+
+def promote_prospect_to_crm(
+    db: Session,
+    ctx: TenantContext,
+    user: User,
+    prospect_id: str,
+    payload: ProspectPromoteRequest,
+    *,
+    request_id: str | None = None,
+) -> dict:
+    """Create tenant CRM customer + lead + case from a Nova prospect (no outbound)."""
+    _require_write(ctx)
+    prospect = require_prospect(db, ctx, prospect_id)
+    if prospect.do_not_contact:
+        raise ProspectingError(409, "Prospect is marked do_not_contact", code="PROSPECT_DO_NOT_CONTACT")
+
+    vertical_id = payload.vertical_id.strip()
+    brand_id = payload.brand_id.strip()
+    if not vertical_id or not brand_id:
+        raise ProspectingError(422, "vertical_id and brand_id are required", code="CRM_SCOPE_REQUIRED")
+
+    source = _crm_lead_source(prospect.id)
+    existing_lead = (
+        db.query(SalesDeskLead)
+        .join(SalesDeskCustomer, SalesDeskCustomer.id == SalesDeskLead.customer_id)
+        .filter(SalesDeskCustomer.tenant_id == ctx.tenant_id, SalesDeskLead.source == source)
+        .first()
+    )
+    evidence_id = _latest_complete_analysis_id(db, ctx.tenant_id, prospect.id)
+    if existing_lead is not None:
+        existing_case = (
+            db.query(SalesDeskCase)
+            .filter(SalesDeskCase.lead_id == existing_lead.id, SalesDeskCase.tenant_id == ctx.tenant_id)
+            .order_by(SalesDeskCase.created_at.desc())
+            .first()
+        )
+        if existing_case is None:
+            raise ProspectingError(409, "Promoted lead exists without a case", code="PROMOTE_INCOMPLETE")
+        return {
+            "prospect_id": prospect.id,
+            "customer_id": existing_lead.customer_id,
+            "lead_id": existing_lead.id,
+            "case_id": existing_case.id,
+            "already_promoted": True,
+            "evidence_analysis_id": evidence_id,
+            "crm_lead_path": f"/customer/leads/{existing_lead.id}",
+            "crm_case_path": f"/customer/cases/{existing_case.id}",
+        }
+
+    # Never copy contact email into fixtures; live promote only when verified + requested.
+    customer_email = None
+    if payload.include_contact_email and prospect.contact_verified and prospect.contact_email:
+        customer_email = prospect.contact_email
+
+    case_title = (payload.case_title or f"Nova — {prospect.company_name}").strip()
+    customer = SalesDeskCustomer(
+        name=prospect.company_name.strip(),
+        email=customer_email,
+        phone=None,
+        vertical_id=vertical_id,
+        vertical_ids=[vertical_id],
+        brand_id=brand_id,
+        tenant_id=ctx.tenant_id,
+        crm_workspace_id=ctx.workspace_id,
+        tenant_profile_id=ctx.active_profile_id,
+        owner_user_id=user.id,
+    )
+    db.add(customer)
+    db.flush()
+
+    lead = SalesDeskLead(
+        customer_id=customer.id,
+        source=source,
+        status=LeadStatus.NEW.value,
+        priority=SalesDeskPriority.MEDIUM.value,
+        assigned_user_id=prospect.assigned_user_id or user.id,
+    )
+    db.add(lead)
+    db.flush()
+
+    case = SalesDeskCase(
+        customer_id=customer.id,
+        lead_id=lead.id,
+        tenant_id=ctx.tenant_id,
+        tenant_profile_id=customer.tenant_profile_id,
+        vertical_id=vertical_id,
+        brand_id=brand_id,
+        title=case_title,
+        status=CaseStatus.OPEN.value,
+        assigned_user_id=prospect.assigned_user_id or user.id,
+    )
+    db.add(case)
+    prospect.status = "contacted"
+    prospect.updated_at = _now()
+    db.flush()
+
+    _audit(
+        db,
+        ctx,
+        user,
+        "prospecting.prospect_promoted",
+        "website_prospect",
+        prospect.id,
+        request_id,
+        {
+            "customer_id": customer.id,
+            "lead_id": lead.id,
+            "case_id": case.id,
+            "domain": prospect.normalized_domain,
+            "evidence_analysis_id": evidence_id,
+            "include_contact_email": bool(customer_email),
+        },
+    )
+    db.commit()
+    db.refresh(customer)
+    db.refresh(lead)
+    db.refresh(case)
+    return {
+        "prospect_id": prospect.id,
+        "customer_id": customer.id,
+        "lead_id": lead.id,
+        "case_id": case.id,
+        "already_promoted": False,
+        "evidence_analysis_id": evidence_id,
+        "crm_lead_path": f"/customer/leads/{lead.id}",
+        "crm_case_path": f"/customer/cases/{case.id}",
+    }
 
 
 def update_prospect(db: Session, ctx: TenantContext, user: User, prospect_id: str, payload: ProspectUpdate, *, request_id: str | None = None) -> dict:

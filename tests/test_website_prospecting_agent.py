@@ -20,6 +20,7 @@ from app.prospecting.schemas import (
     CampaignCreate,
     DeliveryRequest,
     ProspectCreate,
+    ProspectPromoteRequest,
     ProspectingPolicyUpdate,
     ProposalReview,
 )
@@ -33,12 +34,15 @@ from app.prospecting.service import (
     generate_proposal,
     get_policy,
     list_prospects,
+    promote_prospect_to_crm,
     public_opt_out,
     public_proposal,
     render_proposal_html,
     run_analysis,
     update_policy,
 )
+from app.models.sales_desk import SalesDeskCase, SalesDeskCustomer, SalesDeskLead
+from app.prospecting.models import WebsiteProspect
 from app.tenancy.service import TenantContext
 
 
@@ -80,6 +84,7 @@ def test_prospecting_routes_are_mounted():
         "/api/v1/prospecting/summary",
         "/api/v1/prospecting/policy",
         "/api/v1/prospecting/prospects/{prospect_id}/analyses",
+        "/api/v1/prospecting/prospects/{prospect_id}/promote",
         "/api/v1/prospecting/proposals/{proposal_id}/approve",
         "/api/v1/prospecting/proposals/{proposal_id}/deliver",
         "/api/v1/prospecting/proposals/{proposal_id}/presentation",
@@ -526,3 +531,100 @@ def test_public_capability_tokens_are_redacted_from_application_logs():
     assert token not in _safe_log_path(f"/api/v1/public/prospecting/proposals/{token}")
     assert token not in _safe_log_path(f"/api/v1/public/prospecting/opt-out/prospect/{token}")
     assert _safe_log_path("/api/v1/prospecting/summary") == "/api/v1/prospecting/summary"
+
+
+def test_promote_prospect_creates_crm_customer_lead_and_case():
+    db, ctx, user = _db_and_context()
+    prospect = create_prospect(
+        db,
+        ctx,
+        user,
+        ProspectCreate(
+            company_name="Promote Test AB",
+            website_url="https://promote-test.example.invalid/",
+            contact_email="secret@example.invalid",
+            contact_verified=False,
+        ),
+        request_id="promote-1",
+    )
+    result = promote_prospect_to_crm(
+        db,
+        ctx,
+        user,
+        prospect["id"],
+        ProspectPromoteRequest(vertical_id="kitchen", brand_id="formkok"),
+        request_id="promote-1",
+    )
+    assert result["already_promoted"] is False
+    assert result["prospect_id"] == prospect["id"]
+    customer = db.query(SalesDeskCustomer).filter(SalesDeskCustomer.id == result["customer_id"]).one()
+    lead = db.query(SalesDeskLead).filter(SalesDeskLead.id == result["lead_id"]).one()
+    case = db.query(SalesDeskCase).filter(SalesDeskCase.id == result["case_id"]).one()
+    assert customer.tenant_id == ctx.tenant_id
+    assert customer.name == "Promote Test AB"
+    assert customer.email is None  # contact email not copied unless verified+requested
+    assert lead.source == f"prospecting:{prospect['id']}"
+    assert case.lead_id == lead.id
+    assert case.title.startswith("Nova —")
+    assert db.query(WebsiteProspect).filter(WebsiteProspect.id == prospect["id"]).one().status == "contacted"
+
+    again = promote_prospect_to_crm(
+        db,
+        ctx,
+        user,
+        prospect["id"],
+        ProspectPromoteRequest(vertical_id="kitchen", brand_id="formkok"),
+        request_id="promote-2",
+    )
+    assert again["already_promoted"] is True
+    assert again["lead_id"] == result["lead_id"]
+    assert again["case_id"] == result["case_id"]
+    assert db.query(SalesDeskLead).count() == 1
+
+
+def test_promote_respects_do_not_contact_and_optional_verified_email():
+    db, ctx, user = _db_and_context()
+    blocked = create_prospect(
+        db,
+        ctx,
+        user,
+        ProspectCreate(company_name="Blocked AB", website_url="https://blocked.example.invalid/"),
+        request_id="promote-dnc",
+    )
+    row = db.query(WebsiteProspect).filter(WebsiteProspect.id == blocked["id"]).one()
+    row.do_not_contact = True
+    db.commit()
+    try:
+        promote_prospect_to_crm(
+            db,
+            ctx,
+            user,
+            blocked["id"],
+            ProspectPromoteRequest(vertical_id="kitchen", brand_id="formkok"),
+        )
+        assert False, "expected ProspectingError"
+    except ProspectingError as exc:
+        assert exc.code == "PROSPECT_DO_NOT_CONTACT"
+
+    ok = create_prospect(
+        db,
+        ctx,
+        user,
+        ProspectCreate(
+            company_name="Verified Contact AB",
+            website_url="https://verified.example.invalid/",
+            contact_email="owner@verified.example.invalid",
+            contact_verified=True,
+        ),
+        request_id="promote-email",
+    )
+    result = promote_prospect_to_crm(
+        db,
+        ctx,
+        user,
+        ok["id"],
+        ProspectPromoteRequest(vertical_id="kitchen", brand_id="formkok", include_contact_email=True),
+        request_id="promote-email",
+    )
+    customer = db.query(SalesDeskCustomer).filter(SalesDeskCustomer.id == result["customer_id"]).one()
+    assert customer.email == "owner@verified.example.invalid"

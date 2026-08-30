@@ -20,6 +20,8 @@ from app.prospecting.schemas import (
     DiscoveryRequest,
     ProspectCreate,
     ProspectItem,
+    ProspectPromoteRequest,
+    ProspectPromoteResult,
     ProspectUpdate,
     ProspectingPolicyItem,
     ProspectingPolicyUpdate,
@@ -47,6 +49,7 @@ from app.prospecting.service import (
     get_policy,
     list_campaigns,
     list_prospects,
+    promote_prospect_to_crm,
     proposal_dict,
     prospect_dict,
     public_opt_out,
@@ -199,6 +202,24 @@ def post_prospect(
 def get_prospect(prospect_id: str, db: Session = Depends(get_db), ctx: TenantContext = Depends(get_prospecting_context)) -> ProspectItem:
     try:
         return ProspectItem(**prospect_dict(db, require_prospect(db, ctx, prospect_id)))
+    except ProspectingError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/prospects/{prospect_id}/promote", response_model=ProspectPromoteResult)
+def post_promote_prospect(
+    prospect_id: str,
+    payload: ProspectPromoteRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(get_prospecting_context),
+    user: User = Depends(get_current_user),
+) -> ProspectPromoteResult:
+    """N1-1: hand off Nova prospect → CRM customer + lead + case (no outbound)."""
+    try:
+        return ProspectPromoteResult(
+            **promote_prospect_to_crm(db, ctx, user, prospect_id, payload, request_id=_request_id(request))
+        )
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
