@@ -152,6 +152,25 @@ export function createManualProspect(apiBase: string, token: string, payload: Re
   return request<ApiProspect>(apiBase, token, "/prospects", { method: "POST", body: JSON.stringify(payload) });
 }
 
+export type ApiProspectBulkCsvResult = {
+  created: ApiProspect[];
+  skipped: Array<{ row: number; company_name: string | null; website_url: string | null; reason: string }>;
+  row_count: number;
+  max_rows: number;
+};
+
+export function createProspectsFromCsv(apiBase: string, token: string, csvText: string, campaignId?: string | null) {
+  return request<ApiProspectBulkCsvResult>(apiBase, token, "/prospects/bulk-csv", {
+    method: "POST",
+    body: JSON.stringify({
+      csv_text: csvText,
+      campaign_id: campaignId || null,
+      legitimate_interest_note:
+        "CSV bulk intake; relevance and contact basis must be verified before outreach."
+    })
+  });
+}
+
 export function updateProspect(apiBase: string, token: string, prospectId: string, payload: Record<string, unknown>) {
   return request<ApiProspect>(apiBase, token, `/prospects/${prospectId}`, { method: "PATCH", body: JSON.stringify(payload) });
 }

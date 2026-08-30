@@ -5,6 +5,7 @@ import {
   approveProposal,
   createCampaign,
   createManualProspect,
+  createProspectsFromCsv,
   createProposalShare,
   discoverCampaign,
   generateProposal,
@@ -368,6 +369,50 @@ function ManualProspectModal({
   );
 }
 
+function CsvBulkModal({
+  busy,
+  onClose,
+  onImport
+}: {
+  busy: boolean;
+  onClose: () => void;
+  onImport: (csvText: string) => void;
+}) {
+  const [csvText, setCsvText] = useState(
+    "company_name,website_url,city\nExempel Bygg AB,https://example.se,Göteborg\n"
+  );
+  const valid = csvText.toLowerCase().includes("company_name") && csvText.toLowerCase().includes("website_url") && csvText.trim().split("\n").length > 1;
+
+  return (
+    <div className="wpa-modal-backdrop" onMouseDown={onClose} role="presentation">
+      <section aria-labelledby="csv-title" aria-modal="true" className="wpa-modal wpa-manual-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog">
+        <header className="wpa-modal__header">
+          <div className="wpa-modal__icon"><Icon name="activity" size={21} /></div>
+          <div><span>CSV-intag</span><h2 id="csv-title">Klistra in en lista (max 50 rader)</h2></div>
+          <button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button>
+        </header>
+        <label className="wpa-form-wide">
+          CSV med kolumnerna company_name, website_url och valfri city
+          <textarea onChange={(event) => setCsvText(event.target.value)} rows={10} value={csvText} />
+        </label>
+        <div className="wpa-source-box">
+          <Icon name="shield" size={19} />
+          <div>
+            <strong>Ingen e-post från CSV</strong>
+            <p>Kontaktadresser i filen ignoreras. Dubbletter hoppas över. Ingen analys eller utskick startas automatiskt.</p>
+          </div>
+        </div>
+        <footer className="wpa-modal__footer">
+          <button className="wpa-button secondary" onClick={onClose} type="button">Avbryt</button>
+          <button className="wpa-button primary" disabled={!valid || busy} onClick={() => onImport(csvText)} type="button">
+            <Icon name="plus" /> {busy ? "Importerar …" : "Importera lista"}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function ContactVerificationModal({ lead, busy, onClose, onVerify }: { lead: Lead; busy: boolean; onClose: () => void; onVerify: (source: string) => void }) {
   const [source, setSource] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -637,6 +682,8 @@ export function WebsiteProspectAgent() {
   const [campaignOpen, setCampaignOpen] = useState(false);
   const [manualProspectOpen, setManualProspectOpen] = useState(false);
   const [manualProspectBusy, setManualProspectBusy] = useState(false);
+  const [csvBulkOpen, setCsvBulkOpen] = useState(false);
+  const [csvBulkBusy, setCsvBulkBusy] = useState(false);
   const [contactVerifyOpen, setContactVerifyOpen] = useState(false);
   const [contactVerifyBusy, setContactVerifyBusy] = useState(false);
   const [proposalEditorOpen, setProposalEditorOpen] = useState(false);
@@ -989,6 +1036,27 @@ export function WebsiteProspectAgent() {
     }
   }
 
+  async function importCsvProspects(csvText: string): Promise<void> {
+    if (!token) {
+      setCsvBulkOpen(false);
+      setToast("CSV-import kräver en aktiv SalesOS-session.");
+      return;
+    }
+    setCsvBulkBusy(true);
+    try {
+      const result = await createProspectsFromCsv(apiBase, token, csvText);
+      await refreshWorkspace();
+      setCsvBulkOpen(false);
+      setToast(
+        `CSV: ${result.created.length} skapade, ${result.skipped.length} hoppade över (max ${result.max_rows}). Ingen e-post importerad.`
+      );
+    } catch (error) {
+      setToast(operatorErrorMessage(error, "CSV-listan kunde inte importeras."));
+    } finally {
+      setCsvBulkBusy(false);
+    }
+  }
+
   async function verifySelectedContact(source: string): Promise<void> {
     if (!token || !selected.apiId) {
       setToast("Kontaktverifiering kräver en aktiv SalesOS-session.");
@@ -1130,7 +1198,7 @@ export function WebsiteProspectAgent() {
       <main className="wpa-main">
         <header className="wpa-topbar">
           <div className="wpa-topbar__title"><button aria-label="Öppna meny" className="wpa-mobile-menu" onClick={() => setSidebarOpen(true)} type="button"><Icon name="menu" /></button><div><span>{liveSession ? "NOVA · LIVE" : "NOVA"}</span><h1>{liveSession ? "Webbprospektering" : "Nova"}</h1><p>{apiState === "live_empty" ? "Inga sparade webbplatser ännu. Analysera en publik URL för att skapa evidens, kundupplägg och mötesfilm." : liveSession ? <>Nova har <strong>{leads.length}</strong> sparade möjligheter i den här arbetsytan.</> : "Synkroniserar tenant-arbetsytan …"}</p></div></div>
-          <div className="wpa-topbar__actions"><label className="wpa-global-search"><Icon name="search" size={17} /><input aria-label="Sök i alla företag" onChange={(event) => setSearch(event.target.value)} placeholder="Sök företag …" value={search} /><kbd>⌘ K</kbd></label><button aria-label="Notiser" className="wpa-notification" type="button"><Icon name="notification" /><i /></button><button className="wpa-button secondary analyze-url" onClick={() => setManualProspectOpen(true)} type="button"><Icon name="globe" size={16} /> Analysera URL</button><button className="wpa-button primary new-search" disabled={!discoveryConfigured} onClick={() => setCampaignOpen(true)} title={discoveryConfigured ? undefined : "Places är avstängt. Använd Analysera URL."} type="button"><Icon name="plus" size={17} /> Ny sökning</button></div>
+          <div className="wpa-topbar__actions"><label className="wpa-global-search"><Icon name="search" size={17} /><input aria-label="Sök i alla företag" onChange={(event) => setSearch(event.target.value)} placeholder="Sök företag …" value={search} /><kbd>⌘ K</kbd></label><button aria-label="Notiser" className="wpa-notification" type="button"><Icon name="notification" /><i /></button><button className="wpa-button secondary analyze-url" onClick={() => setManualProspectOpen(true)} type="button"><Icon name="globe" size={16} /> Analysera URL</button><button className="wpa-button secondary" onClick={() => setCsvBulkOpen(true)} type="button"><Icon name="file" size={16} /> CSV-lista</button><button className="wpa-button primary new-search" disabled={!discoveryConfigured} onClick={() => setCampaignOpen(true)} title={discoveryConfigured ? undefined : "Places är avstängt. Använd Analysera URL eller CSV."} type="button"><Icon name="plus" size={17} /> Ny sökning</button></div>
         </header>
 
         <div className="wpa-content">
@@ -1253,6 +1321,7 @@ export function WebsiteProspectAgent() {
 
       {campaignOpen ? <CampaignModal onClose={() => setCampaignOpen(false)} onStart={(criteria) => void startCampaign(criteria)} /> : null}
       {manualProspectOpen ? <ManualProspectModal busy={manualProspectBusy} fetchEnabled={fetchEnabled} onClose={() => setManualProspectOpen(false)} onCreate={(payload) => void createAndAnalyzeManualProspect(payload)} /> : null}
+      {csvBulkOpen ? <CsvBulkModal busy={csvBulkBusy} onClose={() => setCsvBulkOpen(false)} onImport={(csvText) => void importCsvProspects(csvText)} /> : null}
       {contactVerifyOpen && selected ? <ContactVerificationModal busy={contactVerifyBusy} lead={selected} onClose={() => setContactVerifyOpen(false)} onVerify={(source) => void verifySelectedContact(source)} /> : null}
       {proposalEditorOpen && selected ? <ProposalEditorModal busy={proposalEditorBusy} lead={selected} onClose={() => setProposalEditorOpen(false)} onSave={(payload) => void saveProposalContent(payload)} /> : null}
       {internalBusinessCaseOpen && selected ? <InternalBusinessCaseModal lead={selected} onClose={() => setInternalBusinessCaseOpen(false)} /> : null}

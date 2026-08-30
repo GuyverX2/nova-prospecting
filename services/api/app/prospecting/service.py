@@ -1,7 +1,9 @@
 """Tenant-scoped website prospecting orchestration and state transitions."""
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 import secrets
 from datetime import datetime, timedelta
@@ -41,6 +43,7 @@ from app.prospecting.schemas import (
     AnalysisRequest,
     CampaignCreate,
     DeliveryRequest,
+    ProspectBulkCsvRequest,
     ProspectCreate,
     ProspectPromoteRequest,
     ProspectUpdate,
@@ -305,6 +308,130 @@ def create_prospect(db: Session, ctx: TenantContext, user: User, payload: Prospe
     db.commit()
     db.refresh(row)
     return prospect_dict(db, row)
+
+
+CSV_BULK_MAX_ROWS = 50
+_CSV_REQUIRED_COLUMNS = {"company_name", "website_url"}
+
+
+def bulk_create_prospects_from_csv(
+    db: Session,
+    ctx: TenantContext,
+    user: User,
+    payload: ProspectBulkCsvRequest,
+    *,
+    request_id: str | None = None,
+) -> dict:
+    """N1-3: create prospects from CSV paste. Skips duplicates/invalid rows; never copies contact email."""
+    _require_write(ctx)
+    if payload.campaign_id:
+        _require_campaign(db, ctx, payload.campaign_id)
+
+    reader = csv.DictReader(io.StringIO(payload.csv_text))
+    if reader.fieldnames is None:
+        raise ProspectingError(422, "CSV must include a header row", code="CSV_HEADER_REQUIRED")
+    headers = {name.strip().lower() for name in reader.fieldnames if name}
+    if not _CSV_REQUIRED_COLUMNS.issubset(headers):
+        raise ProspectingError(
+            422,
+            "CSV header must include company_name and website_url",
+            code="CSV_COLUMNS_REQUIRED",
+        )
+
+    created: list[dict] = []
+    skipped: list[dict] = []
+    data_rows = list(reader)
+    if len(data_rows) > CSV_BULK_MAX_ROWS:
+        raise ProspectingError(
+            422,
+            f"CSV exceeds max {CSV_BULK_MAX_ROWS} data rows",
+            code="CSV_TOO_MANY_ROWS",
+        )
+
+    note = (payload.legitimate_interest_note or "").strip() or (
+        "CSV bulk intake; relevance and contact basis must be verified before outreach."
+    )
+    now = _now()
+    seen_domains: set[str] = set()
+
+    for index, raw in enumerate(data_rows, start=2):
+        normalized = {(key or "").strip().lower(): (value or "").strip() for key, value in raw.items()}
+        company_name = normalized.get("company_name") or None
+        website_url = normalized.get("website_url") or None
+        city = normalized.get("city") or None
+
+        if not company_name or len(company_name) < 2:
+            skipped.append({"row": index, "company_name": company_name, "website_url": website_url, "reason": "company_name_invalid"})
+            continue
+        if not website_url or not website_url.lower().startswith(("https://", "http://")):
+            skipped.append({"row": index, "company_name": company_name, "website_url": website_url, "reason": "website_invalid"})
+            continue
+        try:
+            domain = _domain(website_url)
+            normalized_url = normalize_public_url(website_url)
+        except WebsiteAuditError:
+            skipped.append({"row": index, "company_name": company_name, "website_url": website_url, "reason": "website_invalid"})
+            continue
+        if domain in seen_domains:
+            skipped.append({"row": index, "company_name": company_name, "website_url": website_url, "reason": "duplicate_in_batch"})
+            continue
+        seen_domains.add(domain)
+        duplicate = (
+            db.query(WebsiteProspect)
+            .filter(WebsiteProspect.tenant_id == ctx.tenant_id, WebsiteProspect.normalized_domain == domain)
+            .first()
+        )
+        if duplicate:
+            skipped.append(
+                {
+                    "row": index,
+                    "company_name": company_name,
+                    "website_url": website_url,
+                    "reason": "duplicate_domain",
+                }
+            )
+            continue
+
+        row = WebsiteProspect(
+            id=new_prospect_id(),
+            tenant_id=ctx.tenant_id,
+            campaign_id=payload.campaign_id,
+            assigned_user_id=user.id,
+            company_name=company_name,
+            website_url=normalized_url,
+            normalized_domain=domain,
+            city=city,
+            qualification_score=0,
+            estimated_value_sek=0,
+            status="qualified",
+            legal_basis=payload.legal_basis,
+            legitimate_interest_note=note,
+            retention_until=now + timedelta(days=180),
+            source_provider="csv_manual",
+            source_url=normalized_url,
+            source_checked_at=now,
+        )
+        db.add(row)
+        db.flush()
+        created.append(prospect_dict(db, row, include_latest=False))
+
+    _audit(
+        db,
+        ctx,
+        user,
+        "prospecting.prospects_bulk_csv",
+        "website_prospect",
+        created[0]["id"] if created else "none",
+        request_id,
+        {"created": len(created), "skipped": len(skipped), "row_count": len(data_rows)},
+    )
+    db.commit()
+    return {
+        "created": created,
+        "skipped": skipped,
+        "row_count": len(data_rows),
+        "max_rows": CSV_BULK_MAX_ROWS,
+    }
 
 
 def _latest_maps(db: Session, tenant_id: int, prospect_ids: list[str]) -> tuple[dict[str, WebsiteAnalysis], dict[str, WebsiteProposal]]:

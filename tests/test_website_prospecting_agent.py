@@ -19,6 +19,7 @@ from app.prospecting.schemas import (
     AnalysisRequest,
     CampaignCreate,
     DeliveryRequest,
+    ProspectBulkCsvRequest,
     ProspectCreate,
     ProspectPromoteRequest,
     ProspectingPolicyUpdate,
@@ -27,6 +28,7 @@ from app.prospecting.schemas import (
 from app.prospecting.service import (
     ProspectingError,
     approve_proposal,
+    bulk_create_prospects_from_csv,
     create_campaign,
     create_prospect,
     create_share,
@@ -85,6 +87,7 @@ def test_prospecting_routes_are_mounted():
         "/api/v1/prospecting/policy",
         "/api/v1/prospecting/prospects/{prospect_id}/analyses",
         "/api/v1/prospecting/prospects/{prospect_id}/promote",
+        "/api/v1/prospecting/prospects/bulk-csv",
         "/api/v1/prospecting/proposals/{proposal_id}/approve",
         "/api/v1/prospecting/proposals/{proposal_id}/deliver",
         "/api/v1/prospecting/proposals/{proposal_id}/presentation",
@@ -628,3 +631,68 @@ def test_promote_respects_do_not_contact_and_optional_verified_email():
     )
     customer = db.query(SalesDeskCustomer).filter(SalesDeskCustomer.id == result["customer_id"]).one()
     assert customer.email == "owner@verified.example.invalid"
+
+
+def test_bulk_csv_intake_creates_skips_duplicate_ignores_email():
+    db, ctx, user = _db_and_context()
+    create_prospect(
+        db,
+        ctx,
+        user,
+        ProspectCreate(company_name="Existing AB", website_url="https://existing.example.invalid/"),
+        request_id="csv-seed",
+    )
+    csv_text = (
+        "company_name,website_url,city,contact_email\n"
+        "Alpha AB,https://alpha.example.invalid/,Göteborg,secret@alpha.example.invalid\n"
+        "Beta AB,https://beta.example.invalid/,Malmö,\n"
+        "Dup Existing,https://existing.example.invalid/,Stockholm,\n"
+        "Bad Row,not-a-url,,\n"
+        "Alpha Again,https://alpha.example.invalid/about,,\n"
+    )
+    result = bulk_create_prospects_from_csv(
+        db,
+        ctx,
+        user,
+        ProspectBulkCsvRequest(csv_text=csv_text),
+        request_id="csv-bulk",
+    )
+    assert result["row_count"] == 5
+    assert len(result["created"]) == 2
+    assert {item["normalized_domain"] for item in result["created"]} == {
+        "alpha.example.invalid",
+        "beta.example.invalid",
+    }
+    assert all(item["source_provider"] == "csv_manual" for item in result["created"])
+    assert all(item["contact_email"] is None for item in result["created"])
+    reasons = {item["reason"] for item in result["skipped"]}
+    assert "duplicate_domain" in reasons
+    assert "website_invalid" in reasons
+    assert "duplicate_in_batch" in reasons
+
+    try:
+        bulk_create_prospects_from_csv(
+            db,
+            ctx,
+            user,
+            ProspectBulkCsvRequest(csv_text="website_url\nhttps://only.example.invalid/\n"),
+            request_id="csv-bad-header",
+        )
+        assert False, "expected ProspectingError"
+    except ProspectingError as exc:
+        assert exc.code == "CSV_COLUMNS_REQUIRED"
+
+    too_many = "company_name,website_url\n" + "".join(
+        f"Co {i},https://co{i}.example.invalid/\n" for i in range(51)
+    )
+    try:
+        bulk_create_prospects_from_csv(
+            db,
+            ctx,
+            user,
+            ProspectBulkCsvRequest(csv_text=too_many),
+            request_id="csv-too-many",
+        )
+        assert False, "expected ProspectingError"
+    except ProspectingError as exc:
+        assert exc.code == "CSV_TOO_MANY_ROWS"

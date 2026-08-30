@@ -215,6 +215,32 @@ class ProspectPromoteResult(BaseModel):
     crm_case_path: str
 
 
+class ProspectBulkCsvRequest(BaseModel):
+    """N1-3: paste CSV (company_name,website_url[,city]). No contact emails applied."""
+
+    csv_text: str = Field(..., min_length=8, max_length=200_000)
+    campaign_id: str | None = None
+    legal_basis: Literal["legitimate_interest_b2b", "consent", "existing_customer"] = "legitimate_interest_b2b"
+    legitimate_interest_note: str | None = Field(
+        "CSV bulk intake; relevance and contact basis must be verified before outreach.",
+        max_length=2000,
+    )
+
+
+class ProspectBulkCsvSkipped(BaseModel):
+    row: int
+    company_name: str | None = None
+    website_url: str | None = None
+    reason: str
+
+
+class ProspectBulkCsvResult(BaseModel):
+    created: list[ProspectItem]
+    skipped: list[ProspectBulkCsvSkipped]
+    row_count: int
+    max_rows: int
+
+
 class ShareCreate(BaseModel):
     expires_in_days: int = Field(14, ge=1, le=90)
 

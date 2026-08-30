@@ -18,6 +18,8 @@ from app.prospecting.schemas import (
     DeliveryRequest,
     DeliveryResult,
     DiscoveryRequest,
+    ProspectBulkCsvRequest,
+    ProspectBulkCsvResult,
     ProspectCreate,
     ProspectItem,
     ProspectPromoteRequest,
@@ -39,6 +41,7 @@ from app.prospecting.service import (
     add_suppression,
     analysis_dict,
     approve_proposal,
+    bulk_create_prospects_from_csv,
     campaign_dict,
     create_campaign,
     create_prospect,
@@ -194,6 +197,21 @@ def post_prospect(
 ) -> ProspectItem:
     try:
         return ProspectItem(**create_prospect(db, ctx, user, payload, request_id=_request_id(request)))
+    except ProspectingError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/prospects/bulk-csv", response_model=ProspectBulkCsvResult)
+def post_prospects_bulk_csv(
+    payload: ProspectBulkCsvRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: TenantContext = Depends(get_prospecting_context),
+    user: User = Depends(get_current_user),
+) -> ProspectBulkCsvResult:
+    """N1-3: CSV paste intake (≤50 rows). Skips duplicates; never applies contact email from CSV."""
+    try:
+        return ProspectBulkCsvResult(**bulk_create_prospects_from_csv(db, ctx, user, payload, request_id=_request_id(request)))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
