@@ -104,6 +104,8 @@ def main() -> int:
     )
     args = parser.parse_args()
     env_file: Path = args.env_file
+    if not env_file.is_absolute():
+        env_file = (REPO_ROOT / env_file).resolve()
 
     print("Nova SMTP configure — Google Workspace")
     print("  Host:     smtp.gmail.com:587 STARTTLS")
