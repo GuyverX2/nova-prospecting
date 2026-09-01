@@ -6,7 +6,7 @@ import hashlib
 import io
 import json
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from html import escape
 from urllib.parse import urlsplit
 
@@ -77,7 +77,7 @@ def _load(value: str | None, fallback):
 
 
 def _now() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _domain(url: str) -> str:

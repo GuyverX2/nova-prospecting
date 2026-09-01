@@ -71,4 +71,6 @@ pytest -q tests/test_website_prospecting_agent.py -k redact
 | N0-7 counsel | | | |
 | Resend rotation (if needed) | | | |
 
+**Admin authorization @ 2026-09-02:** [hd-operator-batch-20260902-admin-approval-records.md](../design/p-track/hd-operator-batch-20260902-admin-approval-records.md) — operator may complete N0-4/N0-7 when evidence attached; agents do not mark DONE without filled rows above.
+
 **Related (not EX-008 but same Nova P0 path):** N0-1 egress · N0-2 fetch enable · N0-3 H8c host env · N0-5 smoke send — see [OPS-NOVA-LIVE-FETCH-HEL1-20260830-packet.v1.md](../design/production-go-decisions/OPS-NOVA-LIVE-FETCH-HEL1-20260830-packet.v1.md).
