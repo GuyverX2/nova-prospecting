@@ -24,6 +24,11 @@ import {
   type ApiProspectingSummary
 } from "./websiteProspectingApi";
 import "./websiteProspectAgent.css";
+import { bcp47Locale } from "../../shared/ui/locale/format";
+import { tr } from "../../shared/ui/locale/tr";
+
+
+
 
 type IconName =
   | "activity"
@@ -167,7 +172,7 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
 }
 
 function formatSek(value: number): string {
-  return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK", maximumFractionDigits: 0 }).format(value);
+  return new Intl.NumberFormat(bcp47Locale(), { style: "currency", currency: "SEK", maximumFractionDigits: 0 }).format(value);
 }
 
 function operatorErrorMessage(error: unknown, fallback: string): string {
@@ -255,7 +260,7 @@ function apiProspectToLead(prospect: ApiProspect): Lead {
       verified: prospect.contact_verified
     },
     metrics: analysis?.metrics || { performance: 0, seo: 0, accessibility: 0, mobile: 0 },
-    findings: findings.length ? findings : [{ title: "Analys väntar", detail: "Starta en säker webbplatsanalys för att skapa ett evidenspaket.", severity: "medium", icon: "activity" }],
+    findings: findings.length ? findings : [{ title: tr("pilot-ext.website-prospect-agent.analys-vantar"), detail: "Starta en säker webbplatsanalys för att skapa ett evidenspaket.", severity: "medium", icon: "activity" }],
     pitch: proposal?.summary || `Ett mätbart webbupplägg för ${prospect.company_name} med tydligare kundresor och bättre uppföljning.`,
     accent: "#2867d8"
   };
@@ -277,15 +282,15 @@ function WebsiteMockup({ lead }: { lead: Lead }) {
       <div className="wpa-browser-bar"><i /><i /><i /><span>{lead.domain}</span></div>
       <div className="wpa-site-nav">
         <strong>{lead.initials}</strong>
-        <div><span>Tjänster</span><span>Projekt</span><span>Om oss</span><b>Få offert</b></div>
+        <div><span>Tjänster</span><span>Projekt</span><span>{tr("pilot-ext.website-prospect-agent.om-oss")}</span><b>{tr("pilot-ext.website-prospect-agent.fa-offert")}</b></div>
       </div>
       <div className="wpa-site-hero">
         <small>LOKAL EXPERTIS · TRYGG LEVERANS</small>
         <h4>{lead.company.split(" AB")[0]}</h4>
         <p>{lead.pitch}</p>
-        <button type="button">Kostnadsfri offert <Icon name="arrow" size={12} /></button>
+        <button type="button">{tr("pilot-ext.website-prospect-agent.kostnadsfri-offert")}<Icon name="arrow" size={12} /></button>
       </div>
-      <div className="wpa-site-proof"><span>✓ Certifierade</span><span>✓ Tydlig process</span><span>★ 4,8 av 5</span></div>
+      <div className="wpa-site-proof"><span>{tr("pilot-ext.website-prospect-agent.certifierade")}</span><span>{tr("pilot-ext.website-prospect-agent.tydlig-process")}</span><span>{tr("pilot-ext.website-prospect-agent.4-8-av-5")}</span></div>
       <div className="wpa-site-cards"><i /><i /><i /></div>
     </div>
   );
@@ -306,19 +311,19 @@ function CampaignModal({ onClose, onStart }: { onClose: () => void; onStart: (cr
       <section aria-labelledby="campaign-title" aria-modal="true" className="wpa-modal wpa-campaign-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog">
         <header className="wpa-modal__header">
           <div className="wpa-modal__icon"><Icon name="target" size={21} /></div>
-          <div><span>Ny prospektering</span><h2 id="campaign-title">Välj vilka företag agenten ska hitta</h2></div>
+          <div><span>{tr("pilot-ext.website-prospect-agent.ny-prospektering")}</span><h2 id="campaign-title">{tr("pilot-ext.website-prospect-agent.valj-vilka-foretag-agenten-ska-hitta")}</h2></div>
           <button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button>
         </header>
         <form onSubmit={submit}>
           <div className="wpa-form-grid">
-            <label>Bransch<select onChange={(event) => setIndustry(event.target.value)} value={industry}><option>Bygg & hantverk</option><option>Ekonomi & juridik</option><option>Hälsa & skönhet</option><option>Lokala tjänsteföretag</option></select></label>
-            <label>Region<select onChange={(event) => setRegion(event.target.value)} value={region}><option>Mälardalen</option><option>Stockholm</option><option>Västra Götaland</option><option>Hela Sverige</option></select></label>
-            <label>Minsta förbättringspoäng<select onChange={(event) => setMinScore(event.target.value)} value={minScore}><option value="55">55 — bred sökning</option><option value="65">65 — rekommenderad</option><option value="75">75 — hög potential</option></select></label>
+            <label>Bransch<select onChange={(event) => setIndustry(event.target.value)} value={industry}><option>{tr("pilot-ext.website-prospect-agent.bygg-hantverk")}</option><option>{tr("pilot-ext.website-prospect-agent.ekonomi-juridik")}</option><option>{tr("pilot-ext.website-prospect-agent.halsa-skonhet")}</option><option>{tr("pilot-ext.website-prospect-agent.lokala-tjansteforetag")}</option></select></label>
+            <label>Region<select onChange={(event) => setRegion(event.target.value)} value={region}><option>Mälardalen</option><option>Stockholm</option><option>{tr("pilot-ext.website-prospect-agent.vastra-gotaland")}</option><option>{tr("pilot-ext.website-prospect-agent.hela-sverige")}</option></select></label>
+            <label>Minsta förbättringspoäng<select onChange={(event) => setMinScore(event.target.value)} value={minScore}><option value="55">{tr("pilot-ext.website-prospect-agent.55-bred-sokning")}</option><option value="65">{tr("pilot-ext.website-prospect-agent.65-rekommenderad")}</option><option value="75">{tr("pilot-ext.website-prospect-agent.75-hog-potential")}</option></select></label>
             <label>Företagsstorlek<select defaultValue="3–25"><option>1–10</option><option>3–25</option><option>11–50</option></select></label>
           </div>
           <div className="wpa-source-box">
             <Icon name="shield" size={19} />
-            <div><strong>Säkra källor och varsam frekvens</strong><p>Agenten använder publika företags- och webbuppgifter, respekterar robots.txt och sparar källan till varje observation.</p></div>
+            <div><strong>{tr("pilot-ext.website-prospect-agent.sakra-kallor-och-varsam-frekvens")}</strong><p>{tr("pilot-ext.website-prospect-agent.agenten-anvander-publika-foretags-och-webbup")}</p></div>
           </div>
           <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Avbryt</button><button className="wpa-button primary" type="submit"><Icon name="sparkles" /> Starta agenten</button></footer>
         </form>
@@ -351,19 +356,19 @@ function ManualProspectModal({
       <section aria-labelledby="manual-title" aria-modal="true" className="wpa-modal wpa-manual-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog">
         <header className="wpa-modal__header">
           <div className="wpa-modal__icon"><Icon name="globe" size={21} /></div>
-          <div><span>Evidensbaserad analys</span><h2 id="manual-title">Lägg till och analysera en webbplats</h2></div>
+          <div><span>{tr("pilot-ext.website-prospect-agent.evidensbaserad-analys")}</span><h2 id="manual-title">{tr("pilot-ext.website-prospect-agent.lagg-till-och-analysera-en-webbplats")}</h2></div>
           <button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button>
         </header>
         <div className="wpa-form-grid">
-          <label>Företagsnamn<input onChange={(event) => setCompany(event.target.value)} placeholder="Exempel Bygg AB" value={company} /></label>
+          <label>Företagsnamn<input onChange={(event) => setCompany(event.target.value)} placeholder={tr("pilot-ext.website-prospect-agent.exempel-bygg-ab")} value={company} /></label>
           <label>Publik webbplats<input onChange={(event) => setWebsite(event.target.value)} placeholder="https://example.se" value={website} /></label>
           <label>Ort<input onChange={(event) => setCity(event.target.value)} placeholder="Göteborg" value={city} /></label>
-          <label>Kontaktperson<input onChange={(event) => setContactName(event.target.value)} placeholder="Namn (valfritt)" value={contactName} /></label>
-          <label>Kontaktens e-post<input onChange={(event) => setContactEmail(event.target.value)} placeholder="Verifieras före utskick" type="email" value={contactEmail} /></label>
-          <label className="wpa-form-wide">Berättigat intresse / relevans<textarea onChange={(event) => setBasis(event.target.value)} placeholder="Varför är erbjudandet relevant för detta B2B-företag?" rows={3} value={basis} /></label>
+          <label>Kontaktperson<input onChange={(event) => setContactName(event.target.value)} placeholder={tr("pilot-ext.website-prospect-agent.namn-valfritt")} value={contactName} /></label>
+          <label>Kontaktens e-post<input onChange={(event) => setContactEmail(event.target.value)} placeholder={tr("pilot-ext.website-prospect-agent.verifieras-fore-utskick")} type="email" value={contactEmail} /></label>
+          <label className="wpa-form-wide">{tr("pilot-ext.website-prospect-agent.berattigat-intresse-relevans")}<textarea onChange={(event) => setBasis(event.target.value)} placeholder={tr("pilot-ext.website-prospect-agent.varfor-ar-erbjudandet-relevant-for-detta-b2b")} rows={3} value={basis} /></label>
         </div>
-        <div className="wpa-source-box"><Icon name="shield" size={19} /><div><strong>Avgränsad och säker kontroll</strong><p>Endast den angivna publika sidan hämtas. Robots.txt respekteras, privata nätverk blockeras och varje observation får ett källbevis.</p></div></div>
-        <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Avbryt</button><button className="wpa-button primary" disabled={!valid || busy} onClick={() => onCreate({ company_name: company.trim(), website_url: website.trim(), contact_name: contactName.trim(), contact_email: contactEmail.trim(), city: city.trim(), legitimate_interest_note: basis.trim() })} type="button"><Icon name="activity" /> {busy ? "Analyserar …" : "Spara & analysera"}</button></footer>
+        <div className="wpa-source-box"><Icon name="shield" size={19} /><div><strong>{tr("pilot-ext.website-prospect-agent.avgransad-och-saker-kontroll")}</strong><p>{tr("pilot-ext.website-prospect-agent.endast-den-angivna-publika-sidan-hamtas-robo")}</p></div></div>
+        <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Avbryt</button><button className="wpa-button primary" disabled={!valid || busy} onClick={() => onCreate({ company_name: company.trim(), website_url: website.trim(), contact_name: contactName.trim(), contact_email: contactEmail.trim(), city: city.trim(), legitimate_interest_note: basis.trim() })} type="button"><Icon name="activity" /> {busy ? tr("pilot-ext.website-prospect-agent.analyserar") : tr("pilot-ext.website-prospect-agent.spara-analysera")}</button></footer>
       </section>
     </div>
   );
@@ -391,9 +396,7 @@ function CsvBulkModal({
           <div><span>CSV-intag</span><h2 id="csv-title">Klistra in en lista (max 50 rader)</h2></div>
           <button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button>
         </header>
-        <label className="wpa-form-wide">
-          CSV med kolumnerna company_name, website_url och valfri city
-          <textarea onChange={(event) => setCsvText(event.target.value)} rows={10} value={csvText} />
+        <label className="wpa-form-wide">{tr("pilot-ext.website-prospect-agent.csv-med-kolumnerna-company-name-website-url")}<textarea onChange={(event) => setCsvText(event.target.value)} rows={10} value={csvText} />
         </label>
         <div className="wpa-source-box">
           <Icon name="shield" size={19} />
@@ -405,7 +408,7 @@ function CsvBulkModal({
         <footer className="wpa-modal__footer">
           <button className="wpa-button secondary" onClick={onClose} type="button">Avbryt</button>
           <button className="wpa-button primary" disabled={!valid || busy} onClick={() => onImport(csvText)} type="button">
-            <Icon name="plus" /> {busy ? "Importerar …" : "Importera lista"}
+            <Icon name="plus" /> {busy ? tr("pilot-ext.website-prospect-agent.importerar") : tr("pilot-ext.website-prospect-agent.importera-lista")}
           </button>
         </footer>
       </section>
@@ -420,8 +423,8 @@ function ContactVerificationModal({ lead, busy, onClose, onVerify }: { lead: Lea
     <div className="wpa-modal-backdrop" onMouseDown={onClose} role="presentation">
       <section aria-labelledby="contact-verify-title" aria-modal="true" className="wpa-modal wpa-contact-verify-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog">
         <header className="wpa-modal__header"><div className="wpa-modal__icon review"><Icon name="user" size={21} /></div><div><span>Kontaktkontroll</span><h2 id="contact-verify-title">Verifiera {lead.contact.name}</h2></div><button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button></header>
-        <div className="wpa-contact-verify-body"><div><span>E-post</span><strong>{lead.contact.email || "Saknas"}</strong></div><label>Verifieringskälla<input onChange={(event) => setSource(event.target.value)} placeholder="Företagets webbplats, telefonsamtal eller annan dokumenterad källa" value={source} /></label><label className="wpa-verify-confirm"><input checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} type="checkbox" /><span>Jag har kontrollerat att personen, rollen och e-postadressen är aktuella.</span></label></div>
-        <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Avbryt</button><button className="wpa-button primary approve" disabled={!confirmed || source.trim().length < 5 || !lead.contact.email || busy} onClick={() => onVerify(source.trim())} type="button"><Icon name="check" /> {busy ? "Sparar …" : "Spara verifiering"}</button></footer>
+        <div className="wpa-contact-verify-body"><div><span>E-post</span><strong>{lead.contact.email || "Saknas"}</strong></div><label>Verifieringskälla<input onChange={(event) => setSource(event.target.value)} placeholder={tr("pilot-ext.website-prospect-agent.foretagets-webbplats-telefonsamtal-eller-ann")} value={source} /></label><label className="wpa-verify-confirm"><input checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} type="checkbox" /><span>{tr("pilot-ext.website-prospect-agent.jag-har-kontrollerat-att-personen-rollen-och")}</span></label></div>
+        <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Avbryt</button><button className="wpa-button primary approve" disabled={!confirmed || source.trim().length < 5 || !lead.contact.email || busy} onClick={() => onVerify(source.trim())} type="button"><Icon name="check" /> {busy ? tr("pilot-ext.website-prospect-agent.sparar") : tr("pilot-ext.website-prospect-agent.spara-verifiering")}</button></footer>
       </section>
     </div>
   );
@@ -432,9 +435,9 @@ function ProposalEditorModal({ lead, busy, onClose, onSave }: { lead: Lead; busy
   const [summary, setSummary] = useState(lead.pitch);
   const [sitemap, setSitemap] = useState((lead.proposalSitemap || ["Start", "Tjänster", "Projekt", "Om oss", "Kontakt", "Offert"]).join("\n"));
   const [benefits, setBenefits] = useState((lead.proposalBenefits || [
-    { title: "Fler relevanta leads", detail: "Tydliga erbjudanden och CTA per kundbehov." },
-    { title: "Mindre manuellt arbete", detail: "Kvalificerande formulär och automatisk mötesbokning." },
-    { title: "Starkare lokal SEO", detail: "Ortssidor och teknisk struktur som går att mäta." }
+    { title: tr("pilot-ext.website-prospect-agent.fler-relevanta-leads"), detail: "Tydliga erbjudanden och CTA per kundbehov." },
+    { title: tr("pilot-ext.website-prospect-agent.mindre-manuellt-arbete"), detail: "Kvalificerande formulär och automatisk mötesbokning." },
+    { title: tr("pilot-ext.website-prospect-agent.starkare-lokal-seo"), detail: "Ortssidor och teknisk struktur som går att mäta." }
   ]).map((item) => `${item.title} | ${item.detail}`).join("\n"));
   const [packages, setPackages] = useState((lead.proposalPackages || [
     { name: "Start", price_sek: Math.round(lead.opportunity * 0.7), features: ["Design", "Mobilanpassning"] },
@@ -442,9 +445,9 @@ function ProposalEditorModal({ lead, busy, onClose, onSave }: { lead: Lead; busy
     { name: "Partner", price_sek: Math.round(lead.opportunity * 1.4), features: ["Allt i Tillväxt", "Löpande optimering"] }
   ]).map((item) => `${item.name} | ${item.price_sek}`).join("\n"));
   const [timeline, setTimeline] = useState((lead.proposalTimeline || [
-    { week: "Vecka 1", title: "Strategi och innehåll" },
-    { week: "Vecka 2–4", title: "Design och utveckling" },
-    { week: "Vecka 5", title: "Kvalitetssäkring och lansering" }
+    { week: "Vecka 1", title: tr("pilot-ext.website-prospect-agent.strategi-och-innehall") },
+    { week: "Vecka 2–4", title: tr("pilot-ext.website-prospect-agent.design-och-utveckling") },
+    { week: "Vecka 5", title: tr("pilot-ext.website-prospect-agent.kvalitetssakring-och-lansering") }
   ]).map((item) => `${item.week} | ${item.title}`).join("\n"));
   const sitemapRows = sitemap.split("\n").map((item) => item.trim()).filter(Boolean);
   const valid = headline.trim().length >= 5 && summary.trim().length >= 10 && sitemapRows.length > 0;
@@ -475,14 +478,14 @@ function ProposalEditorModal({ lead, busy, onClose, onSave }: { lead: Lead; busy
   return (
     <div className="wpa-modal-backdrop" onMouseDown={onClose} role="presentation">
       <section aria-labelledby="proposal-editor-title" aria-modal="true" className="wpa-modal wpa-proposal-editor-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog">
-        <header className="wpa-modal__header"><div className="wpa-modal__icon"><Icon name="file" size={21} /></div><div><span>Versionshanterat utkast</span><h2 id="proposal-editor-title">Redigera hela kundupplägget</h2></div><button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button></header>
+        <header className="wpa-modal__header"><div className="wpa-modal__icon"><Icon name="file" size={21} /></div><div><span>{tr("pilot-ext.website-prospect-agent.versionshanterat-utkast")}</span><h2 id="proposal-editor-title">{tr("pilot-ext.website-prospect-agent.redigera-hela-kundupplagget")}</h2></div><button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button></header>
         <div className="wpa-proposal-editor-body">
           <label>Rubrik<input onChange={(event) => setHeadline(event.target.value)} value={headline} /></label>
           <label>Sammanfattning<textarea onChange={(event) => setSummary(event.target.value)} rows={3} value={summary} /></label>
           <div className="wpa-proposal-editor-grid"><label>Sidstruktur<small>En sida per rad</small><textarea onChange={(event) => setSitemap(event.target.value)} rows={6} value={sitemap} /></label><label>Effekter<small>Rubrik | beskrivning</small><textarea onChange={(event) => setBenefits(event.target.value)} rows={6} value={benefits} /></label><label>Paket<small>Namn | pris i SEK</small><textarea onChange={(event) => setPackages(event.target.value)} rows={5} value={packages} /></label><label>Tidslinje<small>Period | aktivitet</small><textarea onChange={(event) => setTimeline(event.target.value)} rows={5} value={timeline} /></label></div>
         </div>
-        <div className="wpa-warning"><Icon name="shield" /><span>Ett godkänt förslag är låst. Skapa en ny version innan du ändrar ett redan godkänt upplägg.</span></div>
-        <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Avbryt</button><button className="wpa-button primary" disabled={!valid || busy} onClick={submit} type="button"><Icon name="check" /> {busy ? "Sparar …" : "Spara utkast"}</button></footer>
+        <div className="wpa-warning"><Icon name="shield" /><span>{tr("pilot-ext.website-prospect-agent.ett-godkant-forslag-ar-last-skapa-en-ny-vers")}</span></div>
+        <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Avbryt</button><button className="wpa-button primary" disabled={!valid || busy} onClick={submit} type="button"><Icon name="check" /> {busy ? tr("pilot-ext.website-prospect-agent.sparar") : tr("pilot-ext.website-prospect-agent.spara-utkast")}</button></footer>
       </section>
     </div>
   );
@@ -503,10 +506,10 @@ function ReviewModal({ lead, onClose, onApprove }: { lead: Lead; onClose: () => 
       <section aria-labelledby="review-title" aria-modal="true" className="wpa-modal wpa-review-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog">
         <header className="wpa-modal__header">
           <div className="wpa-modal__icon review"><Icon name="shield" size={21} /></div>
-          <div><span>Mänsklig verifiering</span><h2 id="review-title">Godkänn leverans till {lead.company}</h2></div>
+          <div><span>{tr("pilot-ext.website-prospect-agent.mansklig-verifiering")}</span><h2 id="review-title">Godkänn leverans till {lead.company}</h2></div>
           <button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button>
         </header>
-        <p className="wpa-review-intro">Inget skickas innan alla kontroller är bekräftade. Du kan gå tillbaka och redigera innehållet när som helst.</p>
+        <p className="wpa-review-intro">{tr("pilot-ext.website-prospect-agent.inget-skickas-innan-alla-kontroller-ar-bekra")}</p>
         <div className="wpa-review-list">
           {rows.map(([title, description], index) => (
             <label className={checks[index] ? "checked" : ""} key={title}>
@@ -516,8 +519,8 @@ function ReviewModal({ lead, onClose, onApprove }: { lead: Lead; onClose: () => 
             </label>
           ))}
         </div>
-        <div className="wpa-delivery-summary"><Icon name="mail" /><div><span>Leverans</span><strong>{lead.contact.email}</strong><small>Personligt e-postutkast + länk till kundförslag</small></div></div>
-        <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Fortsätt redigera</button><button className="wpa-button primary approve" disabled={!allChecked} onClick={onApprove} type="button"><Icon name="check" /> Godkänn för leverans</button></footer>
+        <div className="wpa-delivery-summary"><Icon name="mail" /><div><span>Leverans</span><strong>{lead.contact.email}</strong><small>{tr("pilot-ext.website-prospect-agent.personligt-e-postutkast-lank-till-kundforsla")}</small></div></div>
+        <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">{tr("pilot-ext.website-prospect-agent.fortsatt-redigera")}</button><button className="wpa-button primary approve" disabled={!allChecked} onClick={onApprove} type="button"><Icon name="check" /> Godkänn för leverans</button></footer>
       </section>
     </div>
   );
@@ -530,13 +533,13 @@ function AutomationModal({ onClose, onSave }: { onClose: () => void; onSave: (en
       <section aria-labelledby="automation-title" aria-modal="true" className="wpa-modal wpa-automation-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog">
         <header className="wpa-modal__header">
           <div className="wpa-modal__icon"><Icon name="settings" size={21} /></div>
-          <div><span>Leveranskontroll</span><h2 id="automation-title">Från verifiering till automation</h2></div>
+          <div><span>Leveranskontroll</span><h2 id="automation-title">{tr("pilot-ext.website-prospect-agent.fran-verifiering-till-automation")}</h2></div>
           <button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button>
         </header>
-        <div className="wpa-automation-step active"><b>1</b><div><strong>Manuell verifiering</strong><p>Varje analys, kontakt och e-post godkänns av en person före leverans.</p></div><span>Aktiv nu</span></div>
-        <div className="wpa-automation-step"><b>2</b><div><strong>Regelstyrd automation</strong><p>Leverera automatiskt först när kvalitet, kontaktverifiering och opt-out-policy är godkända.</p></div><label className="wpa-switch"><input checked={enabled} onChange={(event) => setEnabled(event.target.checked)} type="checkbox" /><i /></label></div>
-        {enabled ? <div className="wpa-warning"><Icon name="shield" /><span>Regelstyrd automation sparas i tenant-policyn. Verklig e-postleverans kräver godkänd provider på host.</span></div> : null}
-        <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Avbryt</button><button className="wpa-button primary" onClick={() => onSave(enabled)} type="button">Spara inställning</button></footer>
+        <div className="wpa-automation-step active"><b>1</b><div><strong>{tr("pilot-ext.website-prospect-agent.manuell-verifiering")}</strong><p>{tr("pilot-ext.website-prospect-agent.varje-analys-kontakt-och-e-post-godkanns-av")}</p></div><span>{tr("pilot-ext.website-prospect-agent.aktiv-nu")}</span></div>
+        <div className="wpa-automation-step"><b>2</b><div><strong>{tr("pilot-ext.website-prospect-agent.regelstyrd-automation")}</strong><p>{tr("pilot-ext.website-prospect-agent.leverera-automatiskt-forst-nar-kvalitet-kont")}</p></div><label className="wpa-switch"><input checked={enabled} onChange={(event) => setEnabled(event.target.checked)} type="checkbox" /><i /></label></div>
+        {enabled ? <div className="wpa-warning"><Icon name="shield" /><span>{tr("pilot-ext.website-prospect-agent.regelstyrd-automation-sparas-i-tenant-policy")}</span></div> : null}
+        <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Avbryt</button><button className="wpa-button primary" onClick={() => onSave(enabled)} type="button">{tr("pilot-ext.website-prospect-agent.spara-installning")}</button></footer>
       </section>
     </div>
   );
@@ -561,17 +564,17 @@ function ProviderSettingsModal({
       <section aria-labelledby="provider-settings-title" aria-modal="true" className="wpa-modal wpa-automation-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog">
         <header className="wpa-modal__header">
           <div className="wpa-modal__icon"><Icon name="settings" size={21} /></div>
-          <div><span>Operatörsstatus</span><h2 id="provider-settings-title">Nova-leverantörer och policy</h2></div>
+          <div><span>Operatörsstatus</span><h2 id="provider-settings-title">{tr("pilot-ext.website-prospect-agent.nova-leverantorer-och-policy")}</h2></div>
           <button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button>
         </header>
         <div className="wpa-provider-settings">
-          <article><span>Webbanalys</span><strong>{websiteFetch?.enabled ? "Aktiverad" : "Låst"}</strong><small>Robots.txt respekteras · privata nätverk blockeras</small></article>
-          <article><span>Discovery</span><strong>{discovery?.provider && discovery.provider !== "disabled" ? discovery.provider : "Avstängd"}</strong><small>{discovery?.configured ? "API konfigurerat" : "Manuell URL eller CSV"}</small></article>
-          <article><span>E-post</span><strong>{email?.real_send_enabled && email?.configured ? "Verklig sändning" : "Kö/mock"}</strong><small>{email?.provider || "disabled"}{email?.from_addresses?.length ? ` · ${email.from_addresses.join(", ")}` : ""}</small></article>
-          <article><span>Policy</span><strong>{policy?.mode === "rules_assisted" ? "Regelstyrd" : "Manuell granskning"}</strong><small>Daglig gräns {policy?.daily_delivery_limit ?? 20} · minsta poäng {policy?.minimum_score ?? 80}</small></article>
-          <article><span>Schemaläggare</span><strong>{policy?.scheduler_enabled ? "Aktiv" : "Låst"}</strong><small>Bakgrundskörning kräver operatörsgodkännande på host</small></article>
+          <article><span>Webbanalys</span><strong>{websiteFetch?.enabled ? "Aktiverad" : "Låst"}</strong><small>{tr("pilot-ext.website-prospect-agent.robots-txt-respekteras-privata-natverk-block")}</small></article>
+          <article><span>Discovery</span><strong>{discovery?.provider && discovery.provider !== "disabled" ? discovery.provider : "Avstängd"}</strong><small>{discovery?.configured ? tr("pilot-ext.website-prospect-agent.api-konfigurerat") : tr("pilot-ext.website-prospect-agent.manuell-url-eller-csv")}</small></article>
+          <article><span>E-post</span><strong>{email?.real_send_enabled && email?.configured ? tr("pilot-ext.website-prospect-agent.verklig-sandning") : "Kö/mock"}</strong><small>{email?.provider || "disabled"}{email?.from_addresses?.length ? ` · ${email.from_addresses.join(", ")}` : ""}</small></article>
+          <article><span>Policy</span><strong>{policy?.mode === "rules_assisted" ? "Regelstyrd" : tr("pilot-ext.website-prospect-agent.manuell-granskning")}</strong><small>Daglig gräns {policy?.daily_delivery_limit ?? 20} · minsta poäng {policy?.minimum_score ?? 80}</small></article>
+          <article><span>Schemaläggare</span><strong>{policy?.scheduler_enabled ? "Aktiv" : "Låst"}</strong><small>{tr("pilot-ext.website-prospect-agent.bakgrundskorning-kraver-operatorsgodkannande")}</small></article>
         </div>
-        <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Stäng</button><button className="wpa-button primary" onClick={onOpenAutomation} type="button">Hantera automation</button></footer>
+        <footer className="wpa-modal__footer"><button className="wpa-button secondary" onClick={onClose} type="button">Stäng</button><button className="wpa-button primary" onClick={onOpenAutomation} type="button">{tr("pilot-ext.website-prospect-agent.hantera-automation")}</button></footer>
       </section>
     </div>
   );
@@ -595,16 +598,16 @@ function InternalBusinessCaseModal({ lead, onClose }: { lead: Lead; onClose: () 
   return (
     <div className="wpa-modal-backdrop" onMouseDown={onClose} role="presentation">
       <section aria-labelledby="internal-case-title" aria-modal="true" className="wpa-modal wpa-internal-case-modal" onMouseDown={(event) => event.stopPropagation()} role="dialog">
-        <header className="wpa-modal__header"><div className="wpa-modal__icon review"><Icon name="shield" size={21} /></div><div><span>ENDAST INTERN ARBETSYTA</span><h2 id="internal-case-title">Privat affärskalkyl för {lead.company}</h2></div><button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button></header>
-        <div className="wpa-internal-case-privacy"><Icon name="shield" size={17} /><div><strong>Marginaldata lämnar aldrig den här dialogen</strong><p>Värdena finns bara i minnet i denna webbläsarflik. De sparas inte, skickas inte till API:t och följer aldrig med kundförslaget, mötesfilmen eller delningslänken.</p></div></div>
+        <header className="wpa-modal__header"><div className="wpa-modal__icon review"><Icon name="shield" size={21} /></div><div><span>{tr("pilot-ext.website-prospect-agent.endast-intern-arbetsyta")}</span><h2 id="internal-case-title">Privat affärskalkyl för {lead.company}</h2></div><button aria-label="Stäng" className="wpa-icon-button" onClick={onClose} type="button"><Icon name="close" /></button></header>
+        <div className="wpa-internal-case-privacy"><Icon name="shield" size={17} /><div><strong>{tr("pilot-ext.website-prospect-agent.marginaldata-lamnar-aldrig-den-har-dialogen")}</strong><p>{tr("pilot-ext.website-prospect-agent.vardena-finns-bara-i-minnet-i-denna-webblasa")}</p></div></div>
         <div className="wpa-internal-case-grid">
           <label>Föreslagen investering, SEK<input min="0" onChange={(event) => setInvestment(event.target.value)} step="1000" type="number" value={investment} /></label>
           <label>Internt täckningsbidrag per ny affär<input min="0" onChange={(event) => setContribution(event.target.value)} step="1000" type="number" value={contribution} /></label>
           <label>Intern stängningsgrad från kvalificerat lead, %<input max="100" min="0" onChange={(event) => setCloseRate(event.target.value)} step="1" type="number" value={closeRate} /></label>
         </div>
         <div className="wpa-internal-case-results">
-          <article><span>Affärer till intern break-even</span><strong>{dealsToBreakEven ?? "—"}</strong><small>Investering ÷ täckningsbidrag, avrundat uppåt</small></article>
-          <article><span>Kvalificerade leads som behövs</span><strong>{qualifiedLeadsNeeded ?? "—"}</strong><small>Break-even-affärer ÷ intern stängningsgrad</small></article>
+          <article><span>{tr("pilot-ext.website-prospect-agent.affarer-till-intern-break-even")}</span><strong>{dealsToBreakEven ?? "—"}</strong><small>{tr("pilot-ext.website-prospect-agent.investering-tackningsbidrag-avrundat-uppat")}</small></article>
+          <article><span>{tr("pilot-ext.website-prospect-agent.kvalificerade-leads-som-behovs")}</span><strong>{qualifiedLeadsNeeded ?? "—"}</strong><small>{tr("pilot-ext.website-prospect-agent.break-even-affarer-intern-stangningsgrad")}</small></article>
         </div>
         <footer className="wpa-modal__footer"><button className="wpa-button primary" onClick={onClose} type="button"><Icon name="check" /> Stäng och rensa värden</button></footer>
       </section>
@@ -660,11 +663,11 @@ function NovaLoginGate({
           <label>E-post<input autoComplete="username" onChange={(event) => setEmail(event.target.value)} type="email" value={email} /></label>
           <label>Lösenord<input autoComplete="current-password" onChange={(event) => setPassword(event.target.value)} type="password" value={password} /></label>
           {error ? <p className="wpa-login-gate__error">{error}</p> : null}
-          <button className="wpa-button primary" disabled={busy || !email.trim() || !password} type="submit">{busy ? "Loggar in …" : "Logga in"}</button>
+          <button className="wpa-button primary" disabled={busy || !email.trim() || !password} type="submit">{busy ? tr("pilot-ext.website-prospect-agent.loggar-in") : tr("pilot-ext.app.logga-in")}</button>
         </form>
         <div className="wpa-login-gate__links">
-          <a href="/">Till SalesOS start</a>
-          <a href="/nova-video">Se Nova-filmen</a>
+          <a href="/">{tr("pilot-ext.website-prospect-agent.till-salesos-start")}</a>
+          <a href="/nova-video">{tr("pilot-ext.website-prospect-agent.se-nova-filmen")}</a>
         </div>
       </section>
     </main>
@@ -897,7 +900,9 @@ export function WebsiteProspectAgent() {
       return;
     }
     preview.document.title = `Nova förbereder ${selected.company} …`;
-    preview.document.body.innerHTML = "<p style=\"font:16px system-ui;padding:40px\">Nova bygger mötesfilmen från det verifierade kundupplägget …</p>";
+    preview.document.body.innerHTML = `<p style="font:16px system-ui;padding:40px">${tr(
+      "pilot-ext.website-prospect-agent.nova-bygger-motesfilmen-fran-det-verifierade"
+    )}</p>`;
     try {
       const html = await loadProposalPresentation(apiBase, token, selected.proposalId);
       preview.document.open();
@@ -1156,7 +1161,7 @@ export function WebsiteProspectAgent() {
       setApiPolicy(policy);
       setAutomationEnabled(policy.mode === "rules_assisted");
       setAutomationOpen(false);
-      setToast(policy.scheduler_enabled ? "Regelstyrd automation är sparad och schemaläggaren är aktiv." : "Automationsreglerna är sparade. Bakgrundskörning förblir låst tills schemaläggaren aktiveras av operatör.");
+      setToast(policy.scheduler_enabled ? tr("pilot-ext.website-prospect-agent.regelstyrd-automation-ar-sparad-och-schemala") : tr("pilot-ext.website-prospect-agent.automationsreglerna-ar-sparade-bakgrundskorn"));
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Automationspolicyn kunde inte sparas.");
     }
@@ -1174,8 +1179,8 @@ export function WebsiteProspectAgent() {
   return (
     <div className="wpa-app">
       <aside className={`wpa-sidebar ${sidebarOpen ? "open" : ""}`}>
-        <div className="wpa-brand"><span className="wpa-brand__mark"><Icon name="sparkles" size={19} /></span><div><strong>Nova</strong><small>Webbprospektering</small></div><button aria-label="Stäng meny" onClick={() => setSidebarOpen(false)} type="button"><Icon name="close" /></button></div>
-        <div className="wpa-agent-state"><span className={agentRunning ? "running" : ""}><i /></span><div><strong>Nova</strong><small>{agentRunning ? "Arbetar med ny sökning" : "Agent online · redo"}</small></div></div>
+        <div className="wpa-brand"><span className="wpa-brand__mark"><Icon name="sparkles" size={19} /></span><div><strong>Nova</strong><small>Webbprospektering</small></div><button aria-label={tr("pilot-ext.website-prospect-agent.stang-meny")} onClick={() => setSidebarOpen(false)} type="button"><Icon name="close" /></button></div>
+        <div className="wpa-agent-state"><span className={agentRunning ? "running" : ""}><i /></span><div><strong>Nova</strong><small>{agentRunning ? tr("pilot-ext.website-prospect-agent.arbetar-med-ny-sokning") : tr("pilot-ext.website-prospect-agent.agent-online-redo")}</small></div></div>
         <nav className="wpa-nav" aria-label="Huvudnavigation">
           <small>ARBETSFLÖDE</small>
           <a aria-current="page" href={homePath}><Icon name="layout" /> Översikt</a>
@@ -1188,47 +1193,47 @@ export function WebsiteProspectAgent() {
           <button onClick={() => (liveSession ? setSettingsOpen(true) : setToast("Synkronisera arbetsytan först."))} type="button"><Icon name="settings" /> Inställningar</button>
         </nav>
         <div className="wpa-sidebar-policy">
-          <div><Icon name={automationEnabled ? "wand" : "shield"} size={18} /><span><strong>{automationEnabled ? "Regelstyrt läge" : "Manuell kontroll"}</strong><small>{automationEnabled ? "Kvalificerade leveranser kan köas" : "Allt verifieras före leverans"}</small></span></div>
+          <div><Icon name={automationEnabled ? "wand" : "shield"} size={18} /><span><strong>{automationEnabled ? tr("pilot-ext.website-prospect-agent.regelstyrt-lage") : tr("pilot-ext.website-prospect-agent.manuell-kontroll")}</strong><small>{automationEnabled ? tr("pilot-ext.website-prospect-agent.kvalificerade-leveranser-kan-koas") : tr("pilot-ext.website-prospect-agent.allt-verifieras-fore-leverans")}</small></span></div>
           <button onClick={() => setAutomationOpen(true)} type="button">Hantera <Icon name="chevron" size={14} /></button>
         </div>
-        <div className="wpa-sidebar-user"><span>NO</span><div><strong>{operatorEmail || "Operatör"}</strong><small>{liveSession ? "Inloggad" : "Session"}</small></div><button aria-label="Logga ut" onClick={handleLogout} type="button"><Icon name="close" size={14} /></button></div>
+        <div className="wpa-sidebar-user"><span>NO</span><div><strong>{operatorEmail || "Operatör"}</strong><small>{liveSession ? "Inloggad" : "Session"}</small></div><button aria-label={tr("pilot-ext.admin-start-hub.logga-ut")} onClick={handleLogout} type="button"><Icon name="close" size={14} /></button></div>
       </aside>
-      {sidebarOpen ? <button aria-label="Stäng meny" className="wpa-sidebar-scrim" onClick={() => setSidebarOpen(false)} type="button" /> : null}
+      {sidebarOpen ? <button aria-label={tr("pilot-ext.website-prospect-agent.stang-meny")} className="wpa-sidebar-scrim" onClick={() => setSidebarOpen(false)} type="button" /> : null}
 
       <main className="wpa-main">
         <header className="wpa-topbar">
-          <div className="wpa-topbar__title"><button aria-label="Öppna meny" className="wpa-mobile-menu" onClick={() => setSidebarOpen(true)} type="button"><Icon name="menu" /></button><div><span>{liveSession ? "NOVA · LIVE" : "NOVA"}</span><h1>{liveSession ? "Webbprospektering" : "Nova"}</h1><p>{apiState === "live_empty" ? "Inga sparade webbplatser ännu. Analysera en publik URL för att skapa evidens, kundupplägg och mötesfilm." : liveSession ? <>Nova har <strong>{leads.length}</strong> sparade möjligheter i den här arbetsytan.</> : "Synkroniserar tenant-arbetsytan …"}</p></div></div>
-          <div className="wpa-topbar__actions"><label className="wpa-global-search"><Icon name="search" size={17} /><input aria-label="Sök i alla företag" onChange={(event) => setSearch(event.target.value)} placeholder="Sök företag …" value={search} /><kbd>⌘ K</kbd></label><button aria-label="Notiser" className="wpa-notification" type="button"><Icon name="notification" /><i /></button><button className="wpa-button secondary analyze-url" onClick={() => setManualProspectOpen(true)} type="button"><Icon name="globe" size={16} /> Analysera URL</button><button className="wpa-button secondary" onClick={() => setCsvBulkOpen(true)} type="button"><Icon name="file" size={16} /> CSV-lista</button><button className="wpa-button primary new-search" disabled={!discoveryConfigured} onClick={() => setCampaignOpen(true)} title={discoveryConfigured ? undefined : "Places är avstängt. Använd Analysera URL eller CSV."} type="button"><Icon name="plus" size={17} /> Ny sökning</button></div>
+          <div className="wpa-topbar__title"><button aria-label={tr("pilot-ext.website-prospect-agent.oppna-meny")} className="wpa-mobile-menu" onClick={() => setSidebarOpen(true)} type="button"><Icon name="menu" /></button><div><span>{liveSession ? tr("pilot-ext.website-prospect-agent.nova-live") : "NOVA"}</span><h1>{liveSession ? "Webbprospektering" : "Nova"}</h1><p>{apiState === "live_empty" ? "Inga sparade webbplatser ännu. Analysera en publik URL för att skapa evidens, kundupplägg och mötesfilm." : liveSession ? <>Nova har <strong>{leads.length}</strong> sparade möjligheter i den här arbetsytan.</> : "Synkroniserar tenant-arbetsytan …"}</p></div></div>
+          <div className="wpa-topbar__actions"><label className="wpa-global-search"><Icon name="search" size={17} /><input aria-label={tr("pilot-ext.website-prospect-agent.sok-i-alla-foretag")} onChange={(event) => setSearch(event.target.value)} placeholder={tr("pilot-ext.website-prospect-agent.sok-foretag")} value={search} /><kbd>{tr("pilot-ext.website-prospect-agent.k")}</kbd></label><button aria-label="Notiser" className="wpa-notification" type="button"><Icon name="notification" /><i /></button><button className="wpa-button secondary analyze-url" onClick={() => setManualProspectOpen(true)} type="button"><Icon name="globe" size={16} /> Analysera URL</button><button className="wpa-button secondary" onClick={() => setCsvBulkOpen(true)} type="button"><Icon name="file" size={16} /> CSV-lista</button><button className="wpa-button primary new-search" disabled={!discoveryConfigured} onClick={() => setCampaignOpen(true)} title={discoveryConfigured ? undefined : "Places är avstängt. Använd Analysera URL eller CSV."} type="button"><Icon name="plus" size={17} /> Ny sökning</button></div>
         </header>
 
         <div className="wpa-content">
           <section className={`wpa-runtime-banner ${apiState}`}>
             <span><Icon name={apiState === "live" || apiState === "live_empty" ? "shield" : "activity"} size={16} /></span>
             <div>
-              <strong>{apiState === "live" ? "Säker API-session · beständiga data" : apiState === "live_empty" ? "API ansluten · arbetsytan är tom" : apiState === "loading" ? "Synkroniserar arbetsytan …" : "API kunde inte nås"}</strong>
-              <small>{apiState === "live" ? `${apiSummary?.providers.website_fetch?.enabled ? "Webbanalys aktiverad" : "Webbanalys låst av operatör"} · ${apiSummary?.providers.email?.real_send_enabled ? "verklig e-post aktiverad" : "extern e-post låst"}` : apiState === "live_empty" ? "Lägg till en URL för en källbelagd analys eller starta en kampanj." : apiState === "error" ? "Kontrollera API-anslutningen och försök igen." : "Hämtar policy, prospekt och leverantörsstatus."}</small>
+              <strong>{apiState === "live" ? "Säker API-session · beständiga data" : apiState === "live_empty" ? "API ansluten · arbetsytan är tom" : apiState === "loading" ? tr("pilot-ext.website-prospect-agent.synkroniserar-arbetsytan") : tr("pilot-ext.website-prospect-agent.api-kunde-inte-nas")}</strong>
+              <small>{apiState === "live" ? `${apiSummary?.providers.website_fetch?.enabled ? tr("pilot-ext.website-prospect-agent.webbanalys-aktiverad") : tr("pilot-ext.website-prospect-agent.webbanalys-last-av-operator")} · ${apiSummary?.providers.email?.real_send_enabled ? "verklig e-post aktiverad" : tr("pilot-ext.website-prospect-agent.extern-e-post-last")}` : apiState === "live_empty" ? "Lägg till en URL för en källbelagd analys eller starta en kampanj." : apiState === "error" ? tr("pilot-ext.website-prospect-agent.kontrollera-api-anslutningen-och-forsok-igen") : tr("pilot-ext.website-prospect-agent.hamtar-policy-prospekt-och-leverantorsstatus")}</small>
             </div>
             {apiState === "error" ? <button onClick={() => void refreshWorkspace(true)} type="button"><Icon name="refresh" size={13} /> Försök igen</button> : <button onClick={() => void refreshWorkspace(true)} type="button"><Icon name="refresh" size={13} /> Synkronisera</button>}
           </section>
           <section className="wpa-stats" aria-label="Nyckeltal">
-            <article><span className="blue"><Icon name="search" /></span><div><small>Analyserade webbplatser</small><strong>{apiSummary?.analyzed_sites ?? 0}</strong><p><b>Sparade</b> i tenant</p></div></article>
-            <article><span className="violet"><Icon name="target" /></span><div><small>Kvalificerade möjligheter</small><strong>{apiSummary?.qualified_opportunities ?? leads.length}</strong><p><b>{leads.length}</b> visas nu</p></div></article>
-            <article><span className="amber"><Icon name="clipboard" /></span><div><small>Väntar på granskning</small><strong>{apiSummary?.awaiting_review ?? reviewCount}</strong><p>Din åtgärd krävs</p></div></article>
-            <article><span className="green"><Icon name="trend" /></span><div><small>Potentiellt ordervärde</small><strong>{Math.round((apiSummary?.potential_value_sek ?? totalPipeline) / 1000)} tkr</strong><p><b>Aktuell</b> pipeline</p></div></article>
+            <article><span className="blue"><Icon name="search" /></span><div><small>{tr("pilot-ext.website-prospect-agent.analyserade-webbplatser")}</small><strong>{apiSummary?.analyzed_sites ?? 0}</strong><p><b>Sparade</b> i tenant</p></div></article>
+            <article><span className="violet"><Icon name="target" /></span><div><small>{tr("pilot-ext.website-prospect-agent.kvalificerade-mojligheter")}</small><strong>{apiSummary?.qualified_opportunities ?? leads.length}</strong><p><b>{leads.length}</b> visas nu</p></div></article>
+            <article><span className="amber"><Icon name="clipboard" /></span><div><small>{tr("pilot-ext.website-prospect-agent.vantar-pa-granskning")}</small><strong>{apiSummary?.awaiting_review ?? reviewCount}</strong><p>{tr("pilot-ext.website-prospect-agent.din-atgard-kravs")}</p></div></article>
+            <article><span className="green"><Icon name="trend" /></span><div><small>{tr("pilot-ext.website-prospect-agent.potentiellt-ordervarde")}</small><strong>{Math.round((apiSummary?.potential_value_sek ?? totalPipeline) / 1000)} tkr</strong><p><b>Aktuell</b> pipeline</p></div></article>
           </section>
 
           <section className={`wpa-agent-run ${agentRunning ? "is-running" : ""}`}>
-            <div className="wpa-agent-run__main"><span className="wpa-agent-orb"><Icon name="sparkles" size={21} /></span><div><span>{agentRunning ? "NOVA ARBETAR" : "LIVE-ARBETSYTA"}</span><h2>{agentRunning ? "Söker, källkontrollerar och kvalificerar …" : apiState === "live_empty" ? "Ingen aktiv kampanj" : campaignCriteria}</h2><p>{agentRunning ? "Publika företagsuppgifter → webbplatskontroll → kvalitetspoäng" : apiSummary?.providers.website_fetch?.enabled ? "Webbanalys är på. Lägg till en URL eller starta en sökning — inget skickas utan godkännande." : "Webbanalys är avstängd av operatör. Du kan spara URL:er, men hämtning av HTML är låst."}</p></div></div>
-            <div className="wpa-flow" aria-label="Agentens arbetsflöde">{[
+            <div className="wpa-agent-run__main"><span className="wpa-agent-orb"><Icon name="sparkles" size={21} /></span><div><span>{agentRunning ? tr("pilot-ext.website-prospect-agent.nova-arbetar") : "LIVE-ARBETSYTA"}</span><h2>{agentRunning ? "Söker, källkontrollerar och kvalificerar …" : apiState === "live_empty" ? "Ingen aktiv kampanj" : campaignCriteria}</h2><p>{agentRunning ? "Publika företagsuppgifter → webbplatskontroll → kvalitetspoäng" : apiSummary?.providers.website_fetch?.enabled ? tr("pilot-ext.website-prospect-agent.webbanalys-ar-pa-lagg-till-en-url-eller-star") : tr("pilot-ext.website-prospect-agent.webbanalys-ar-avstangd-av-operator-du-kan-sp")}</p></div></div>
+            <div className="wpa-flow" aria-label={tr("pilot-ext.website-prospect-agent.agentens-arbetsflode")}>{[
               ["search", "Hitta", `${leads.length} sparade`], ["target", "Kvalificera", `${reviewCount} att granska`], ["activity", "Analysera", "Evidens"], ["file", "Skapa förslag", "Versionerat"], ["shield", "Verifiera", "Manuellt"]
             ].map(([icon, label, meta], index) => <div className={index < 3 ? "done" : index === 3 ? "current" : ""} key={label}><span><Icon name={icon as IconName} size={15} /></span><p><strong>{label}</strong><small>{meta}</small></p>{index < 4 ? <i><Icon name="chevron" size={13} /></i> : null}</div>)}</div>
-            <button className="wpa-run-action" disabled={!discoveryConfigured} onClick={() => setCampaignOpen(true)} title={discoveryConfigured ? undefined : "Places är avstängt. Använd Analysera URL."} type="button">Justera sökning <Icon name="settings" size={15} /></button>
+            <button className="wpa-run-action" disabled={!discoveryConfigured} onClick={() => setCampaignOpen(true)} title={discoveryConfigured ? undefined : "Places är avstängt. Använd Analysera URL."} type="button">{tr("pilot-ext.website-prospect-agent.justera-sokning")}<Icon name="settings" size={15} /></button>
             {agentRunning ? <div className="wpa-run-progress"><span /></div> : null}
           </section>
 
           <div className="wpa-workspace">
             <section className="wpa-prospects-card">
-              <header className="wpa-section-header"><div><h2>Möjligheter</h2><span>{filteredLeads.length} av {leads.length} visade</span></div><div><div className="wpa-filter-tabs" role="group" aria-label="Filtrera möjligheter">{([['all', 'Alla'], ['review', 'Att granska'], ['qualified', 'Kvalificerade'], ['approved', 'Godkända']] as [FilterKey, string][]).map(([key, label]) => <button aria-pressed={filter === key} className={filter === key ? "active" : ""} key={key} onClick={() => setFilter(key)} type="button">{label}</button>)}</div><button aria-label="Fler filter" className="wpa-filter-button" type="button"><Icon name="filter" size={16} /> Filter</button></div></header>
+              <header className="wpa-section-header"><div><h2>Möjligheter</h2><span>{filteredLeads.length} av {leads.length} visade</span></div><div><div className="wpa-filter-tabs" role="group" aria-label={tr("pilot-ext.website-prospect-agent.filtrera-mojligheter")}>{([['all', 'Alla'], ['review', 'Att granska'], ['qualified', 'Kvalificerade'], ['approved', 'Godkända']] as [FilterKey, string][]).map(([key, label]) => <button aria-pressed={filter === key} className={filter === key ? "active" : ""} key={key} onClick={() => setFilter(key)} type="button">{label}</button>)}</div><button aria-label={tr("pilot-ext.website-prospect-agent.fler-filter")} className="wpa-filter-button" type="button"><Icon name="filter" size={16} /> Filter</button></div></header>
               <div className="wpa-table-wrap">
                 <table className="wpa-prospects-table">
                   <thead><tr><th>Företag</th><th>Förbättringspoäng</th><th>Status</th><th>Potential</th><th aria-label="Åtgärder" /></tr></thead>
@@ -1237,7 +1242,7 @@ export function WebsiteProspectAgent() {
                       <td><div className="wpa-company-cell"><span style={{ background: `${lead.accent}16`, color: lead.accent }}>{lead.initials}</span><div><strong>{lead.company}</strong><small><Icon name="globe" size={12} /> {lead.domain} <i /> {lead.city}</small></div></div></td>
                       <td><div className="wpa-score-cell"><strong>{lead.score}</strong><div><span style={{ width: `${lead.score}%` }} /></div><small>{lead.score >= 80 ? "Hög" : "God"} potential</small></div></td>
                       <td><span className={`wpa-status ${statusClass(lead.status)}`}>{lead.status === "analyzing" ? <i /> : null}{lead.status === "approved" ? <Icon name="check" size={12} /> : null}{STATUS_LABELS[lead.status]}</span><small className="wpa-updated">{lead.updated}</small></td>
-                      <td><strong className="wpa-opportunity">{formatSek(lead.opportunity)}</strong><small className="wpa-updated">Estimerat projekt</small></td>
+                      <td><strong className="wpa-opportunity">{formatSek(lead.opportunity)}</strong><small className="wpa-updated">{tr("pilot-ext.website-prospect-agent.estimerat-projekt")}</small></td>
                       <td><button aria-label={`Öppna ${lead.company}`} className="wpa-row-action" onClick={(event) => { event.stopPropagation(); selectLead(lead.id); }} type="button"><Icon name="chevron" size={16} /></button></td>
                     </tr>
                   ))}</tbody>
@@ -1246,71 +1251,71 @@ export function WebsiteProspectAgent() {
                   liveSession && leads.length === 0 ? (
                     <div className="wpa-empty wpa-empty--live">
                       <Icon name="globe" />
-                      <strong>Inga sparade webbplatser ännu</strong>
-                      <p>Analysera en publik URL. Nova hämtar evidens och skapar kundupplägg — inget skickas utan ditt godkännande.</p>
-                      <button onClick={() => setManualProspectOpen(true)} type="button">Analysera URL</button>
+                      <strong>{tr("pilot-ext.website-prospect-agent.inga-sparade-webbplatser-annu")}</strong>
+                      <p>{tr("pilot-ext.website-prospect-agent.analysera-en-publik-url-nova-hamtar-evidens")}</p>
+                      <button onClick={() => setManualProspectOpen(true)} type="button">{tr("pilot-ext.website-prospect-agent.analysera-url")}</button>
                     </div>
                   ) : (
-                    <div className="wpa-empty"><Icon name="search" /><strong>Inga företag matchar filtret</strong><p>Prova en annan sökning eller visa alla möjligheter.</p><button onClick={() => { setFilter("all"); setSearch(""); }} type="button">Rensa filter</button></div>
+                    <div className="wpa-empty"><Icon name="search" /><strong>{tr("pilot-ext.website-prospect-agent.inga-foretag-matchar-filtret")}</strong><p>{tr("pilot-ext.website-prospect-agent.prova-en-annan-sokning-eller-visa-alla-mojli")}</p><button onClick={() => { setFilter("all"); setSearch(""); }} type="button">{tr("pilot-ext.website-prospect-agent.rensa-filter")}</button></div>
                   )
                 ) : null}
               </div>
-              <footer className="wpa-table-footer"><span>Senast uppdaterad nyss</span><button onClick={() => void refreshWorkspace(true)} type="button"><Icon name="refresh" size={14} /> Uppdatera</button></footer>
+              <footer className="wpa-table-footer"><span>{tr("pilot-ext.website-prospect-agent.senast-uppdaterad-nyss")}</span><button onClick={() => void refreshWorkspace(true)} type="button"><Icon name="refresh" size={14} /> Uppdatera</button></footer>
             </section>
 
             {selected ? (
             <aside className="wpa-detail-card" aria-label={`Detalj för ${selected.company}`}>
               <header className="wpa-detail-head">
                 <div className="wpa-detail-company"><span style={{ background: `${selected.accent}16`, color: selected.accent }}>{selected.initials}</span><div><h2>{selected.company}</h2><a href={`https://${selected.domain}`} rel="noreferrer" target="_blank">{selected.domain} <Icon name="external" size={12} /></a></div></div>
-                <button aria-label="Fler val" className="wpa-icon-button" type="button"><Icon name="more" /></button>
+                <button aria-label={tr("pilot-ext.website-prospect-agent.fler-val")} className="wpa-icon-button" type="button"><Icon name="more" /></button>
               </header>
               <div className="wpa-company-meta"><span><Icon name="building" size={14} /> {selected.industry}</span><span>{selected.employees} anställda</span><span>{selected.turnover}</span></div>
-              <div className="wpa-detail-tabs" role="tablist"><button aria-selected={detailTab === "analysis"} className={detailTab === "analysis" ? "active" : ""} onClick={() => setDetailTab("analysis")} role="tab" type="button">Analys</button><button aria-selected={detailTab === "proposal"} className={detailTab === "proposal" ? "active" : ""} onClick={() => setDetailTab("proposal")} role="tab" type="button">Nytt upplägg</button><button aria-selected={detailTab === "email"} className={detailTab === "email" ? "active" : ""} onClick={() => setDetailTab("email")} role="tab" type="button">E-post</button></div>
+              <div className="wpa-detail-tabs" role="tablist"><button aria-selected={detailTab === "analysis"} className={detailTab === "analysis" ? "active" : ""} onClick={() => setDetailTab("analysis")} role="tab" type="button">Analys</button><button aria-selected={detailTab === "proposal"} className={detailTab === "proposal" ? "active" : ""} onClick={() => setDetailTab("proposal")} role="tab" type="button">{tr("pilot-ext.website-prospect-agent.nytt-upplagg")}</button><button aria-selected={detailTab === "email"} className={detailTab === "email" ? "active" : ""} onClick={() => setDetailTab("email")} role="tab" type="button">E-post</button></div>
 
               <div className="wpa-detail-body">
                 {detailTab === "analysis" ? <>
-                  <section className="wpa-score-summary"><div className="wpa-score-ring" style={{ "--score": `${selected.score * 3.6}deg` } as CSSProperties}><span><strong>{selected.score}</strong><small>/100</small></span></div><div><span>FÖRBÄTTRINGSPOTENTIAL</span><h3>{selected.score >= 80 ? "Stor affärsmöjlighet" : "Tydlig förbättringsmöjlighet"}</h3><p>Högre poäng betyder fler verifierade möjligheter att skapa mätbar effekt.</p></div></section>
-                  <section><div className="wpa-subhead"><h3>Teknisk översikt</h3><span>Senast testad idag</span></div><div className="wpa-metrics-grid"><MetricBar label="Prestanda" value={selected.metrics.performance} /><MetricBar label="SEO" value={selected.metrics.seo} /><MetricBar label="Tillgänglighet" value={selected.metrics.accessibility} /><MetricBar label="Mobil" value={selected.metrics.mobile} /></div>{selected.screenshot ? <figure className="wpa-page-screenshot"><img alt={`Mobil skärmbild av ${selected.domain}`} src={selected.screenshot} /><figcaption>Mobil rendering från PageSpeed Insights</figcaption></figure> : null}</section>
-                  <section><div className="wpa-subhead"><h3>Viktigaste observationerna</h3><span>{selected.evidence?.length ? `${selected.evidence.length} källbevis` : "Observationer"}</span></div><div className="wpa-findings">{selected.findings.map((finding) => <article key={finding.title}><span className={finding.severity}><Icon name={finding.icon} size={16} /></span><div><strong>{finding.title}</strong><p>{finding.detail}</p></div><i className={finding.severity} /></article>)}</div>{selected.evidence?.length ? <details className="wpa-evidence"><summary><Icon name="shield" size={14} /> Visa verifierbart källunderlag</summary><div>{selected.evidence.slice(0, 8).map((item) => <article key={item.id}><span>{item.label}</span><code>{typeof item.value === "string" ? item.value || "Saknas" : JSON.stringify(item.value)}</code><a href={item.url} rel="noreferrer" target="_blank">Källa <Icon name="external" size={10} /></a></article>)}</div></details> : null}</section>
+                  <section className="wpa-score-summary"><div className="wpa-score-ring" style={{ "--score": `${selected.score * 3.6}deg` } as CSSProperties}><span><strong>{selected.score}</strong><small>/100</small></span></div><div><span>FÖRBÄTTRINGSPOTENTIAL</span><h3>{selected.score >= 80 ? tr("pilot-ext.website-prospect-agent.stor-affarsmojlighet") : tr("pilot-ext.website-prospect-agent.tydlig-forbattringsmojlighet")}</h3><p>{tr("pilot-ext.website-prospect-agent.hogre-poang-betyder-fler-verifierade-mojligh")}</p></div></section>
+                  <section><div className="wpa-subhead"><h3>{tr("pilot-ext.website-prospect-agent.teknisk-oversikt")}</h3><span>{tr("pilot-ext.website-prospect-agent.senast-testad-idag")}</span></div><div className="wpa-metrics-grid"><MetricBar label="Prestanda" value={selected.metrics.performance} /><MetricBar label="SEO" value={selected.metrics.seo} /><MetricBar label="Tillgänglighet" value={selected.metrics.accessibility} /><MetricBar label="Mobil" value={selected.metrics.mobile} /></div>{selected.screenshot ? <figure className="wpa-page-screenshot"><img alt={`Mobil skärmbild av ${selected.domain}`} src={selected.screenshot} /><figcaption>{tr("pilot-ext.website-prospect-agent.mobil-rendering-fran-pagespeed-insights")}</figcaption></figure> : null}</section>
+                  <section><div className="wpa-subhead"><h3>{tr("pilot-ext.website-prospect-agent.viktigaste-observationerna")}</h3><span>{selected.evidence?.length ? `${selected.evidence.length} källbevis` : "Observationer"}</span></div><div className="wpa-findings">{selected.findings.map((finding) => <article key={finding.title}><span className={finding.severity}><Icon name={finding.icon} size={16} /></span><div><strong>{finding.title}</strong><p>{finding.detail}</p></div><i className={finding.severity} /></article>)}</div>{selected.evidence?.length ? <details className="wpa-evidence"><summary><Icon name="shield" size={14} /> Visa verifierbart källunderlag</summary><div>{selected.evidence.slice(0, 8).map((item) => <article key={item.id}><span>{item.label}</span><code>{typeof item.value === "string" ? item.value || "Saknas" : JSON.stringify(item.value)}</code><a href={item.url} rel="noreferrer" target="_blank">Källa <Icon name="external" size={10} /></a></article>)}</div></details> : null}</section>
                   <section className="wpa-contact"><div className="wpa-subhead"><h3>Beslutsfattare</h3>{selected.contact.verified ? <span className="verified"><Icon name="check" size={12} /> Verifierad</span> : <span>Behöver verifieras</span>}</div><div><span><Icon name="user" /></span><p><strong>{selected.contact.name}</strong><small>{selected.contact.role}</small>{selected.contact.email ? <a href={`mailto:${selected.contact.email}`}>{selected.contact.email}</a> : <small>E-post saknas</small>}</p>{selected.apiId && !selected.contact.verified && selected.contact.email ? <button className="wpa-verify-contact" onClick={() => setContactVerifyOpen(true)} type="button"><Icon name="check" size={11} /> Verifiera</button> : null}</div></section>
-                  {selected.apiId ? <section className="wpa-compliance"><div><Icon name="shield" size={15} /><span><strong>Kontaktpolicy</strong><small>{selected.doNotContact ? "Spärrad — inget utskick tillåts" : `Rättslig grund: ${selected.legalBasis || "måste verifieras"}`}</small></span></div><div className="wpa-compliance-actions">{selected.sourceUrl ? <a href={selected.sourceUrl} rel="noreferrer" target="_blank">Ursprungskälla <Icon name="external" size={11} /></a> : null}{selected.contact.email && !selected.doNotContact ? <button onClick={() => void suppressSelectedContact()} type="button">Spärra kontakt</button> : null}</div></section> : null}
+                  {selected.apiId ? <section className="wpa-compliance"><div><Icon name="shield" size={15} /><span><strong>Kontaktpolicy</strong><small>{selected.doNotContact ? "Spärrad — inget utskick tillåts" : `Rättslig grund: ${selected.legalBasis || "måste verifieras"}`}</small></span></div><div className="wpa-compliance-actions">{selected.sourceUrl ? <a href={selected.sourceUrl} rel="noreferrer" target="_blank">Ursprungskälla <Icon name="external" size={11} /></a> : null}{selected.contact.email && !selected.doNotContact ? <button onClick={() => void suppressSelectedContact()} type="button">{tr("pilot-ext.website-prospect-agent.sparra-kontakt")}</button> : null}</div></section> : null}
                 </> : null}
 
                 {detailTab === "proposal" ? <>
-                  <div className="wpa-proposal-heading"><span><Icon name="sparkles" size={16} /> AGENTGENERERAT UTKAST</span><h3>{selected.proposalHeadline || `Nytt webbupplägg för ${selected.company}`}</h3><p>Utformat från verifierade behov, bransch och befintligt innehåll.</p></div>
+                  <div className="wpa-proposal-heading"><span><Icon name="sparkles" size={16} /> AGENTGENERERAT UTKAST</span><h3>{selected.proposalHeadline || `Nytt webbupplägg för ${selected.company}`}</h3><p>{tr("pilot-ext.website-prospect-agent.utformat-fran-verifierade-behov-bransch-och")}</p></div>
                   <WebsiteMockup lead={selected} />
                   <section className="wpa-meeting-film">
                     <div className="wpa-meeting-film__signal"><span><Icon name="sparkles" size={18} /></span><i /><i /></div>
-                    <div><small>NOVA · KUNDANPASSAD MÖTESFILM</small><h3>Gör analysen omöjlig att bläddra förbi.</h3><p>Nio självkörande kapitel med evidens, målbild, affärseffekt och nästa steg. Textning, valfri svensk webbläsarröst, helskärm och möteskontroller ingår.</p></div>
+                    <div><small>{tr("pilot-ext.website-prospect-agent.nova-kundanpassad-motesfilm")}</small><h3>{tr("pilot-ext.website-prospect-agent.gor-analysen-omojlig-att-bladdra-forbi")}</h3><p>{tr("pilot-ext.website-prospect-agent.nio-sjalvkorande-kapitel-med-evidens-malbild")}</p></div>
                     <div className="wpa-meeting-film__actions"><button className="wpa-button primary" onClick={() => void openMeetingPresentation()} type="button"><Icon name="eye" size={15} /> Starta mötesfilmen</button><button className="wpa-button secondary" onClick={() => setInternalBusinessCaseOpen(true)} type="button"><Icon name="shield" size={14} /> Intern kalkyl</button></div>
                   </section>
-                  <section><div className="wpa-subhead"><h3>Föreslagen struktur</h3><span>{selected.proposalSitemap?.length || 6} sidor</span></div><div className="wpa-sitemap">{(selected.proposalSitemap || ["Start", "Tjänster", "Projekt", "Om oss", "Kontakt", "Offert"]).map((page) => <span key={page}>{page}</span>)}</div></section>
-                  <section><div className="wpa-subhead"><h3>Effekt & effektivisering</h3></div><div className="wpa-benefits">{(selected.proposalBenefits || [{ title: "Fler relevanta leads", detail: "Tydliga erbjudanden och CTA per kundbehov." }, { title: "Mindre manuellt arbete", detail: "Kvalificerande formulär och automatisk mötesbokning." }, { title: "Starkare lokal SEO", detail: "Ortssidor och teknisk struktur som går att mäta." }]).map((benefit, index) => <article key={`${benefit.title}-${index}`}><Icon name={(["trend", "bolt", "search"] as IconName[])[index % 3]} /><div><strong>{benefit.title}</strong><p>{benefit.detail}</p></div></article>)}</div></section>
-                  {selected.proposalPackages?.length ? <section><div className="wpa-subhead"><h3>Genomförandenivåer</h3><span>Exkl. moms</span></div><div className="wpa-proposal-packages">{selected.proposalPackages.map((item) => <article className={item.recommended ? "recommended" : ""} key={item.name}><span>{item.recommended ? "REKOMMENDERAD" : "PAKET"}</span><strong>{item.name}</strong><b>{formatSek(item.price_sek)}</b><small>{item.features.slice(0, 3).join(" · ")}</small></article>)}</div></section> : null}
+                  <section><div className="wpa-subhead"><h3>{tr("pilot-ext.website-prospect-agent.foreslagen-struktur")}</h3><span>{selected.proposalSitemap?.length || 6} sidor</span></div><div className="wpa-sitemap">{(selected.proposalSitemap || ["Start", "Tjänster", "Projekt", "Om oss", "Kontakt", "Offert"]).map((page) => <span key={page}>{page}</span>)}</div></section>
+                  <section><div className="wpa-subhead"><h3>{tr("pilot-ext.website-prospect-agent.effekt-effektivisering")}</h3></div><div className="wpa-benefits">{(selected.proposalBenefits || [{ title: tr("pilot-ext.website-prospect-agent.fler-relevanta-leads"), detail: "Tydliga erbjudanden och CTA per kundbehov." }, { title: tr("pilot-ext.website-prospect-agent.mindre-manuellt-arbete"), detail: "Kvalificerande formulär och automatisk mötesbokning." }, { title: tr("pilot-ext.website-prospect-agent.starkare-lokal-seo"), detail: "Ortssidor och teknisk struktur som går att mäta." }]).map((benefit, index) => <article key={`${benefit.title}-${index}`}><Icon name={(["trend", "bolt", "search"] as IconName[])[index % 3]} /><div><strong>{benefit.title}</strong><p>{benefit.detail}</p></div></article>)}</div></section>
+                  {selected.proposalPackages?.length ? <section><div className="wpa-subhead"><h3>Genomförandenivåer</h3><span>{tr("pilot-ext.website-prospect-agent.exkl-moms")}</span></div><div className="wpa-proposal-packages">{selected.proposalPackages.map((item) => <article className={item.recommended ? "recommended" : ""} key={item.name}><span>{item.recommended ? "REKOMMENDERAD" : "PAKET"}</span><strong>{item.name}</strong><b>{formatSek(item.price_sek)}</b><small>{item.features.slice(0, 3).join(" · ")}</small></article>)}</div></section> : null}
                   {selected.proposalTimeline?.length ? <section><div className="wpa-subhead"><h3>Leveransplan</h3></div><div className="wpa-proposal-timeline">{selected.proposalTimeline.map((item) => <div key={`${item.week}-${item.title}`}><strong>{item.week}</strong><span>{item.title}</span></div>)}</div></section> : null}
-                  <section className="wpa-scope"><div><span>Rekommenderad investering</span><strong>{formatSek(selected.proposalPackages?.find((item) => item.recommended)?.price_sek || selected.opportunity)}</strong><small>Engångsprojekt · exkl. moms</small></div><div><span>Estimerad leverans</span><strong>4–6 veckor</strong><small>Från godkänt innehåll</small></div></section>
+                  <section className="wpa-scope"><div><span>{tr("pilot-ext.website-prospect-agent.rekommenderad-investering")}</span><strong>{formatSek(selected.proposalPackages?.find((item) => item.recommended)?.price_sek || selected.opportunity)}</strong><small>{tr("pilot-ext.website-prospect-agent.engangsprojekt-exkl-moms")}</small></div><div><span>{tr("pilot-ext.website-prospect-agent.estimerad-leverans")}</span><strong>{tr("pilot-ext.website-prospect-agent.4-6-veckor")}</strong><small>{tr("pilot-ext.website-prospect-agent.fran-godkant-innehall")}</small></div></section>
                 </> : null}
 
                 {detailTab === "email" ? <>
-                  <div className="wpa-email-state"><span className={selected.status === "approved" ? "approved" : "draft"}><Icon name={selected.status === "approved" ? "check" : "file"} size={14} /> {selected.status === "approved" ? "Godkänd för leverans" : "Utkast · ej skickat"}</span><small>Senast sparat nyss</small></div>
+                  <div className="wpa-email-state"><span className={selected.status === "approved" ? "approved" : "draft"}><Icon name={selected.status === "approved" ? "check" : "file"} size={14} /> {selected.status === "approved" ? tr("pilot-ext.website-prospect-agent.godkand-for-leverans") : tr("pilot-ext.website-prospect-agent.utkast-ej-skickat")}</span><small>{tr("pilot-ext.website-prospect-agent.senast-sparat-nyss")}</small></div>
                   <section className="wpa-email-compose"><label>Till<div><input readOnly value={`${selected.contact.name} <${selected.contact.email}>`} />{selected.contact.verified ? <span><Icon name="check" size={11} /> Verifierad</span> : null}</div></label>{(apiSummary?.providers.email?.from_addresses?.length || 0) > 0 ? <label>Avsändare<select onChange={(event) => setFromAddress(event.target.value)} value={fromAddress || apiSummary?.providers.email?.from_addresses?.[0] || ""}>{(apiSummary?.providers.email?.from_addresses || []).map((address) => <option key={address} value={address}>{address}</option>)}</select></label> : null}<label>Ämne<input onChange={(event) => setEmailSubject(event.target.value)} value={emailSubject} /></label><label>Meddelande<textarea onChange={(event) => setEmailBody(event.target.value)} rows={16} value={emailBody} /></label></section>
-                  <section className="wpa-attachment"><span><Icon name="file" /></span><div><strong>Analys, kundupplägg & mötesfilm</strong><small>Personlig webblänk · kundanpassad · självkörande presentation</small></div><button onClick={() => setDetailTab("proposal")} type="button"><Icon name="eye" size={15} /> Förhandsvisa</button></section>
-                  <div className="wpa-email-note"><Icon name="shield" size={16} /><span>{apiSummary?.providers.email?.real_send_enabled && apiSummary.providers.email.provider === "smtp_generic" ? "Efter godkännande skickas mailet från den valda avsändaren. Kill-switch och spärrlista gäller." : "Utskicket köas tills smtp_generic och kill-switch är aktiverade på host."}</span></div>
+                  <section className="wpa-attachment"><span><Icon name="file" /></span><div><strong>{tr("pilot-ext.website-prospect-agent.analys-kundupplagg-motesfilm")}</strong><small>{tr("pilot-ext.website-prospect-agent.personlig-webblank-kundanpassad-sjalvkorande")}</small></div><button onClick={() => setDetailTab("proposal")} type="button"><Icon name="eye" size={15} /> Förhandsvisa</button></section>
+                  <div className="wpa-email-note"><Icon name="shield" size={16} /><span>{apiSummary?.providers.email?.real_send_enabled && apiSummary.providers.email.provider === "smtp_generic" ? tr("pilot-ext.website-prospect-agent.efter-godkannande-skickas-mailet-fran-den-va") : tr("pilot-ext.website-prospect-agent.utskicket-koas-tills-smtp-generic-och-kill-s")}</span></div>
                 </> : null}
               </div>
 
               <footer className="wpa-detail-footer">
-                {detailTab === "analysis" ? <><button className="wpa-button secondary" disabled={!fetchEnabled} onClick={analyzeSelected} title={fetchEnabled ? undefined : "Webbhämtning avstängd"} type="button"><Icon name="refresh" size={15} /> Analysera igen</button><button className="wpa-button primary" disabled={selected.status === "analyzing"} onClick={createProposal} type="button"><Icon name="sparkles" size={15} /> {selected.status === "analyzing" ? "Analyserar …" : "Skapa kundupplägg"}</button></> : null}
-                {detailTab === "proposal" ? <><button className="wpa-button secondary" onClick={selected.status === "approved" ? () => void createProposal() : () => setProposalEditorOpen(true)} type="button"><Icon name={selected.status === "approved" ? "plus" : "file"} size={15} /> {selected.status === "approved" ? "Skapa ny version" : "Redigera upplägg"}</button><button className="wpa-button primary" onClick={() => setDetailTab("email")} type="button">Skapa e-post <Icon name="arrow" size={15} /></button></> : null}
-                {detailTab === "email" ? <><button className="wpa-button secondary" disabled={testDeliveryBusy} onClick={() => void sendTestDelivery()} type="button">{testDeliveryBusy ? "Skickar test …" : "Skicka test till mig"}</button><button className={`wpa-button primary ${selected.status === "approved" ? "approved" : ""}`} disabled={selected.doNotContact || !selected.contact.email} onClick={() => setReviewOpen(true)} type="button"><Icon name={selected.status === "approved" ? "check" : "shield"} size={15} /> {selected.status === "approved" ? "Visa verifiering" : "Granska & godkänn"}</button></> : null}
+                {detailTab === "analysis" ? <><button className="wpa-button secondary" disabled={!fetchEnabled} onClick={analyzeSelected} title={fetchEnabled ? undefined : "Webbhämtning avstängd"} type="button"><Icon name="refresh" size={15} /> Analysera igen</button><button className="wpa-button primary" disabled={selected.status === "analyzing"} onClick={createProposal} type="button"><Icon name="sparkles" size={15} /> {selected.status === "analyzing" ? tr("pilot-ext.website-prospect-agent.analyserar") : tr("pilot-ext.website-prospect-agent.skapa-kundupplagg")}</button></> : null}
+                {detailTab === "proposal" ? <><button className="wpa-button secondary" onClick={selected.status === "approved" ? () => void createProposal() : () => setProposalEditorOpen(true)} type="button"><Icon name={selected.status === "approved" ? "plus" : "file"} size={15} /> {selected.status === "approved" ? tr("pilot-ext.website-prospect-agent.skapa-ny-version") : tr("pilot-ext.website-prospect-agent.redigera-upplagg")}</button><button className="wpa-button primary" onClick={() => setDetailTab("email")} type="button">{tr("pilot-ext.website-prospect-agent.skapa-e-post")}<Icon name="arrow" size={15} /></button></> : null}
+                {detailTab === "email" ? <><button className="wpa-button secondary" disabled={testDeliveryBusy} onClick={() => void sendTestDelivery()} type="button">{testDeliveryBusy ? tr("pilot-ext.website-prospect-agent.skickar-test") : tr("pilot-ext.website-prospect-agent.skicka-test-till-mig")}</button><button className={`wpa-button primary ${selected.status === "approved" ? "approved" : ""}`} disabled={selected.doNotContact || !selected.contact.email} onClick={() => setReviewOpen(true)} type="button"><Icon name={selected.status === "approved" ? "check" : "shield"} size={15} /> {selected.status === "approved" ? tr("pilot-ext.website-prospect-agent.visa-verifiering") : tr("pilot-ext.website-prospect-agent.granska-godkann")}</button></> : null}
               </footer>
             </aside>
             ) : (
-            <aside className="wpa-detail-card wpa-detail-card--empty" aria-label="Tom Nova-arbetsyta">
+            <aside className="wpa-detail-card wpa-detail-card--empty" aria-label={tr("pilot-ext.website-prospect-agent.tom-nova-arbetsyta")}>
               <div className="wpa-empty wpa-empty--live">
                 <Icon name="globe" />
-                <strong>Börja med en publik webbplats</strong>
-                <p>Sparade, tenant-isolerade prospekt visas här efter analys eller import.</p>
+                <strong>{tr("pilot-ext.website-prospect-agent.borja-med-en-publik-webbplats")}</strong>
+                <p>{tr("pilot-ext.website-prospect-agent.sparade-tenant-isolerade-prospekt-visas-har")}</p>
                 <button className="wpa-button primary" onClick={() => setManualProspectOpen(true)} type="button"><Icon name="plus" size={15} /> Analysera URL</button>
               </div>
             </aside>

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MUSIC_TAIL, NovaAudioEngine } from "./novaAudio";
 import "./presentation.css";
 import "./nova.css";
+import { tr } from "../../shared/ui/locale/tr";
+
 
 type SceneId = "opening" | "problem" | "discovery" | "analysis" | "proposal" | "control" | "live" | "closing";
 
@@ -12,59 +14,61 @@ type Scene = {
   caption: string;
 };
 
-const SCENES: Scene[] = [
+function scenes(): Scene[] {
+  return [
   {
     id: "opening",
-    eyebrow: "Nova · demofilm",
-    title: "Hittar möjligheten. Lämnar beslutet till er.",
+    eyebrow: tr("pilot-ext.nova-presentation.nova-demofilm"),
+    title: tr("pilot-ext.nova-presentation.hittar-mojligheten-lamnar-beslutet-till-er"),
     caption:
-      "Nova är SalesOS webbprospekteringsagent. Den söker, källkontrollerar och prioriterar — inte som en autonom säljare."
+      tr("pilot-ext.nova-presentation.nova-ar-salesos-webbprospekteringsagent-den")
   },
   {
     id: "problem",
-    eyebrow: "Där tiden går",
-    title: "Rätt bolag tar för lång tid att hitta.",
-    caption: "Signaler finns överallt. Det som saknas är evidens, och ett tydligt nästa steg när ni ska agera."
+    eyebrow: tr("pilot-ext.nova-presentation.dar-tiden-gar"),
+    title: tr("pilot-ext.nova-presentation.ratt-bolag-tar-for-lang-tid-att-hitta"),
+    caption: tr("pilot-ext.nova-presentation.signaler-finns-overallt-det-som-saknas-ar-ev")
   },
   {
     id: "discovery",
     eyebrow: "Sökning",
-    title: "Publika uppgifter. Kontrollerad webb.",
-    caption: "Nova utgår från publika företagsuppgifter, granskar nuvarande webb och lyfter det som går att förbättra."
+    title: tr("pilot-ext.nova-presentation.publika-uppgifter-kontrollerad-webb"),
+    caption: tr("pilot-ext.nova-presentation.nova-utgar-fran-publika-foretagsuppgifter-gr")
   },
   {
     id: "analysis",
     eyebrow: "Underlag",
-    title: "Poäng med synlig evidens.",
-    caption: "Varje möjlighet får poäng, teknisk översikt och källkontrollerat underlag. Ni ser varför den syns."
+    title: tr("pilot-ext.nova-presentation.poang-med-synlig-evidens"),
+    caption: tr("pilot-ext.nova-presentation.varje-mojlighet-far-poang-teknisk-oversikt-o")
   },
   {
     id: "proposal",
     eyebrow: "Kundupplägg",
-    title: "Ett utkast ni äger.",
-    caption: "Nova tar fram ett redigerbart kundupplägg. Rubriker, paket och mejl ändras av er innan något lämnar bordet."
+    title: tr("pilot-ext.nova-presentation.ett-utkast-ni-ager"),
+    caption: tr("pilot-ext.nova-presentation.nova-tar-fram-ett-redigerbart-kundupplagg-ru")
   },
   {
     id: "control",
     eyebrow: "Mandat",
-    title: "Ingen e-post går ut av sig själv.",
-    caption: "Mänsklig verifiering, spärrlista och spårbarhet sitter före leverans. AI hjälper. Människan beslutar."
+    title: tr("pilot-ext.nova-presentation.ingen-e-post-gar-ut-av-sig-sjalv"),
+    caption: tr("pilot-ext.nova-presentation.mansklig-verifiering-sparrlista-och-sparbarh")
   },
   {
     id: "live",
-    eyebrow: "Efter filmen",
-    title: "Se agenten på riktigt.",
-    caption: "Det ni öppnar sedan är den live Nova-arbetsytan — inte en tillrättalagd film."
+    eyebrow: tr("pilot-ext.nova-presentation.efter-filmen"),
+    title: tr("pilot-ext.nova-presentation.se-agenten-pa-riktigt"),
+    caption: tr("pilot-ext.nova-presentation.det-ni-oppnar-sedan-ar-den-live-nova-arbetsy")
   },
   {
     id: "closing",
     eyebrow: "Nova",
-    title: "Nästa möjlighet, med evidens.",
-    caption: "Öppna Nova och ta fram nästa möjlighet med underlag, mandat och nästa steg på samma skärm."
+    title: tr("pilot-ext.nova-presentation.nasta-mojlighet-med-evidens"),
+    caption: tr("pilot-ext.nova-presentation.oppna-nova-och-ta-fram-nasta-mojlighet-med-u")
   }
 ];
+}
 
-const NARRATION_FILES: string[] = SCENES.map(
+const NARRATION_FILES: string[] = scenes().map(
   (scene, index) => `/presentation/nova-${String(index + 1).padStart(2, "0")}-${scene.id}.mp3`
 );
 
@@ -107,7 +111,7 @@ function SceneVisual({ id }: { id: SceneId }) {
         <i className="novaOrb__spark novaOrb__spark--two" />
         <div className="novaOrb__core">
           <strong>Nova</strong>
-          <small>{id === "closing" ? "öppna demon" : "agent online"}</small>
+          <small>{id === "closing" ? tr("pilot-ext.nova-presentation.oppna-demon") : "agent online"}</small>
         </div>
       </div>
     );
@@ -174,11 +178,11 @@ function SceneVisual({ id }: { id: SceneId }) {
     return (
       <div className="novaProposal" aria-hidden="true">
         <header>
-          <small>Redigerbart utkast</small>
-          <em>v1 · ej skickat</em>
+          <small>{tr("pilot-ext.nova-presentation.redigerbart-utkast")}</small>
+          <em>{tr("pilot-ext.nova-presentation.v1-ej-skickat")}</em>
         </header>
-        <strong>Ny webb som säljer mer av det ni redan gör</strong>
-        <p>Struktur, paket och nästa steg — klart att justera innan något lämnar bordet.</p>
+        <strong>{tr("pilot-ext.nova-presentation.ny-webb-som-s-ljer-mer-av-det-ni-redan-g-r")}</strong>
+        <p>{tr("pilot-ext.nova-presentation.struktur-paket-och-n-sta-steg-klart-att-just")}</p>
         <ul>
           <li>Struktur</li>
           <li>Paket</li>
@@ -209,8 +213,8 @@ function SceneVisual({ id }: { id: SceneId }) {
           <span>salesos.se/nova</span>
         </header>
         <section>
-          <small>Kontrollerad pilot</small>
-          <strong>Samma flöde.<br />Samma mandat.</strong>
+          <small>{tr("pilot-ext.nova-presentation.kontrollerad-pilot")}</small>
+          <strong>{tr("pilot-ext.nova-presentation.samma-flode")}<br />Samma mandat.</strong>
           <div>
             <span>Sökning</span>
             <span>Evidens</span>
@@ -262,7 +266,7 @@ export function NovaPresentation() {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = "Nova-film — SalesOS webbprospektering";
+    document.title = tr("pilot-ext.nova-presentation.nova-film-salesos-webbprospektering");
     return () => {
       document.title = previousTitle;
     };
@@ -275,7 +279,7 @@ export function NovaPresentation() {
     });
     return index;
   }, [currentTime, sceneStarts]);
-  const scene = SCENES[activeSceneIndex];
+  const scene = scenes()[activeSceneIndex];
 
   useEffect(() => {
     if (!started) return;
@@ -376,10 +380,10 @@ export function NovaPresentation() {
       </div>
 
       {!started ? (
-        <section className="presentationStart" aria-label="Starta Nova-filmen">
+        <section className="presentationStart" aria-label={tr("pilot-ext.nova-presentation.starta-nova-filmen")}>
           <BrandMark />
           <div className="presentationStart__copy">
-            <span className="presentationKicker">Nova-film · ca 2 min</span>
+            <span className="presentationKicker">{tr("pilot-ext.nova-presentation.nova-film-ca-2-min")}</span>
             <h1>Webbprospektering<br />med evidens och mandat.</h1>
             <p>En separat film om Nova. Arenas klickbara demo ligger kvar på /nova — den här sidan är bara filmen.</p>
           </div>
@@ -406,10 +410,10 @@ export function NovaPresentation() {
             {status === "ready"
               ? "Nova-filmen, berättarröst och musik är redo"
               : status === "error"
-                ? "Berättarrösten kunde inte laddas — kontrollera nätverket"
-                : "Laddar berättarröst…"}
+                ? tr("pilot-ext.nova-presentation.berattarrosten-kunde-inte-laddas-kontrollera")
+                : tr("pilot-ext.nova-presentation.laddar-berattarrost")}
           </p>
-          <a className="presentationStart__skip" href="/nova">Gå direkt till Nova</a>
+          <a className="presentationStart__skip" href="/nova">{tr("pilot-ext.nova-presentation.ga-direkt-till-nova")}</a>
         </section>
       ) : (
         <>
@@ -420,7 +424,7 @@ export function NovaPresentation() {
               <div className="presentationTopbar__chapter">
                 <span>{String(activeSceneIndex + 1).padStart(2, "0")}</span>
                 <i />
-                <small>{String(SCENES.length).padStart(2, "0")}</small>
+                <small>{String(scenes().length).padStart(2, "0")}</small>
               </div>
             </div>
           </header>
@@ -429,17 +433,17 @@ export function NovaPresentation() {
               <span className="presentationKicker">{scene.eyebrow}</span>
               <h1 id="nova-title">{scene.title}</h1>
               {scene.id === "live" ? <div className="presentationTruthTag"><i />Kontrollerad pilot i dag</div> : null}
-              {scene.id === "closing" ? <a className="presentationCta" href="/nova">Öppna Nova <span>→</span></a> : null}
+              {scene.id === "closing" ? <a className="presentationCta" href="/nova">{tr("pilot-ext.nova-presentation.oppna-nova")}<span>→</span></a> : null}
             </div>
             <div className="presentationStage__visual"><SceneVisual id={scene.id} /></div>
           </section>
           <div className="presentationCaption" aria-live="polite"><span>{scene.caption}</span></div>
           <footer className="presentationControls">
             <button aria-label={playing ? "Pausa" : "Spela"} onClick={togglePlayback} type="button"><Icon name={playing ? "pause" : "play"} /></button>
-            <button aria-label="Starta om" onClick={() => { seek(0); if (!playing) togglePlayback(); }} type="button"><Icon name="restart" /></button>
+            <button aria-label={tr("pilot-ext.nova-presentation.starta-om")} onClick={() => { seek(0); if (!playing) togglePlayback(); }} type="button"><Icon name="restart" /></button>
             <span className="presentationControls__time">{formatTime(currentTime, duration)}</span>
             <input
-              aria-label="Nova-filmens position"
+              aria-label={tr("pilot-ext.nova-presentation.nova-filmens-position")}
               max={duration}
               min="0"
               onChange={(event) => seek(Number(event.target.value))}
@@ -449,7 +453,7 @@ export function NovaPresentation() {
               value={Math.min(currentTime, duration)}
             />
             <span className="presentationControls__time">{formatTime(duration, duration)}</span>
-            <button aria-label={muted ? "Slå på ljud" : "Stäng av ljud"} onClick={toggleMute} type="button">
+            <button aria-label={muted ? tr("pilot-ext.nova-presentation.sla-pa-ljud") : tr("pilot-ext.nova-presentation.stang-av-ljud")} onClick={toggleMute} type="button">
               <Icon name={muted ? "muted" : "sound"} />
             </button>
             <button aria-label="Helskärm" onClick={() => void toggleFullscreen()} type="button">
