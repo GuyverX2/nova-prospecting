@@ -180,7 +180,11 @@ def test_contact_verification_and_operator_suppression_routes():
         assert stored.json()["do_not_contact"] is True
 
 
-def test_share_security_duplicate_delivery_and_daily_limit():
+def test_share_security_duplicate_delivery_and_daily_limit(monkeypatch):
+    # Policy JSON mirrors process settings; isolate from developer .env real-email flags.
+    from app.core.config import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "PROSPECTING_REAL_EMAIL_ENABLED", False)
     with _workspace() as (client, db, admin_a, *_):
         headers = _headers(admin_a)
         policy = client.patch(
