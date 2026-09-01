@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="sv" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nova · Webbprospektering — SalesOS</title>
+<link rel="stylesheet" href="os-shared.css" />
+<style>
+.prospect{display:grid;grid-template-columns:1.2fr 1fr;gap:var(--dens-gap);align-items:start}
+@media(max-width:980px){.prospect{grid-template-columns:1fr}}
+.hero-company{font-size:20px;font-weight:700;letter-spacing:-.02em}
+.proposal-line{display:flex;gap:10px;align-items:flex-start;padding:10px 0;font-size:12.5px;border-bottom:1px solid var(--border)}
+.proposal-line:last-child{border-bottom:none}
+.proposal-line .ic{width:18px;height:18px;border-radius:5px;flex:none;display:grid;place-items:center;font-size:10px;
+  background:var(--accent-soft);color:var(--accent);margin-top:1px}
+.sig-pills{display:flex;flex-wrap:wrap;gap:6px}
+.sig-pill{font-size:10.5px;padding:3px 8px;border-radius:var(--radius-pill);border:1px solid var(--border);
+  color:var(--text-2);background:var(--surface-2)}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div><div class="bg-glow"></div>
+
+<div class="os">
+  <header class="menubar">
+    <div class="brand">
+      <div class="logo">SO</div>
+      <div class="nm">SalesOS<span style="margin-left:8px;color:var(--text-3)">/</span><span class="area" style="margin-left:8px">Nova</span></div>
+    </div>
+    <div class="cmd" onclick="openPalette()">Sök prospekt eller kör en åtgärd…<kbd>⌘K</kbd></div>
+    <div class="menu-right">
+      <div class="ctx"><span class="dot"></span> Formkök <small>· prospektering</small></div>
+      <button class="iconbtn" title="Aviseringar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="badge">3</span></button>
+      <button class="iconbtn" id="themeBtn" title="Byt tema"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+      <div class="avatar" title="Anna Melin">AM</div>
+    </div>
+  </header>
+
+  <div class="body">
+    <aside class="sidebar">
+      <div class="side-section">Prospektering</div>
+      <div class="nav active"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Upptäckt</div>
+      <div class="nav"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Analys<span class="count">2</span></div>
+      <div class="nav"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Förslag<span class="count">3</span></div>
+      <div class="side-section">Granskning</div>
+      <div class="nav"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l7 4v5c0 5-3.5 8-7 9-3.5-1-7-4-7-9V7z"/></svg>Verifieringskö<span class="count">3</span></div>
+      <div class="nav"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Levererat</div>
+      <div class="side-section">Konfiguration</div>
+      <div class="nav"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.87.34l-.06-.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.04 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.56 1.04H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.04z"/></svg>Policy &amp; inställningar</div>
+    </aside>
+
+    <main class="main">
+      <div class="wrap">
+        <div class="head" style="position:relative"><span class="chip" style="right:-4px;top:-6px">1</span>
+          <div>
+            <h1>Nova — <em>webbprospektering</em></h1>
+            <div class="sub">Upptäcker, analyserar och föreslår nya kunder med evidens. Du verifierar — agenten skickar aldrig själv.</div>
+          </div>
+          <button class="btn primary" onclick="openPalette()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Ny prospektering</button>
+        </div>
+
+        <div class="attn" style="position:relative"><span class="chip" style="top:-8px;left:-8px">2</span>
+          <div class="attn-card" onclick="openDetail()">
+            <div class="tag" style="color:var(--warn)">● Verifiera</div>
+            <h3>3 förslag väntar på mänsklig granskning</h3>
+            <p>Nova har analyserat och skrivit förslag med evidens. Ingenting skickas förrän du godkänner.</p>
+          </div>
+          <div class="attn-card">
+            <div class="tag" style="color:var(--accent)">● Analyserar</div>
+            <h3>2 sajter under analys</h3>
+            <p>Signal om kök/renovering hittad — Nova bygger underlag.</p>
+          </div>
+          <div class="attn-card">
+            <div class="tag" style="color:var(--neutral,var(--text-3))">● Läge</div>
+            <h3>Webbhämtning på</h3>
+            <p>SSRF-säkrad. Misslyckas alltid till "stängt" — ingen risk för felaktigt utskick.</p>
+          </div>
+        </div>
+
+        <!-- pipeline -->
+        <div class="panel focusable" style="position:relative"><span class="chip" style="top:14px;right:14px">3</span>
+          <div class="panel-head"><h2>Pipeline</h2><span class="sp"></span><span class="pill violet" style="height:18px"><span class="d"></span>7 prospekt</span></div>
+          <div style="padding:14px">
+            <div class="kanban">
+              <div class="kcol"><div class="kcol-head">Upptäckt <span class="n">4</span></div>
+                <div class="kcard" data-open-detail><div class="co">Altanbyggarna Väst</div><div class="meta">Bygg · altan</div><div class="sig">Nyskapad</div></div>
+                <div class="kcard" data-open-detail><div class="co">Västkustens Kök</div><div class="meta">Kök</div><div class="sig">Nyskapad</div></div>
+                <div class="kcard" data-open-detail><div class="co">Haga Fastighet</div><div class="meta">Fastighet</div><div class="sig">Nyskapad</div></div>
+              </div>
+              <div class="kcol"><div class="kcol-head">Analyserar <span class="n">2</span></div>
+                <div class="kcard" data-open-detail><div class="co">Bastu Stuga &amp; Tunna</div><div class="meta">Bastu · spabad</div><div class="sig"><span class="pill warn" style="height:16px"><span class="d"></span> analyserar</span></div></div>
+                <div class="kcard" data-open-detail><div class="co">Granitop Sten AB</div><div class="meta">Sten · bänkskiva</div><div class="sig"><span class="pill warn" style="height:16px"><span class="d"></span> analyserar</span></div></div>
+              </div>
+              <div class="kcol"><div class="kcol-head">Kvalificerad <span class="n">1</span></div>
+                <div class="kcard" data-open-detail><div class="co">PrimeFloor Epoxy</div><div class="meta">Golv · epoxy</div><div class="sig"><span class="pill neutral" style="height:16px"><span class="d"></span> kvalificerad</span></div></div>
+              </div>
+              <div class="kcol"><div class="kcol-head">Förslag redo <span class="n">3</span></div>
+                <div class="kcard" data-open-detail><div class="co">Altanbyggarna Väst</div><div class="meta">Förslag + evidens</div><div class="sig"><span class="pill violet" style="height:16px"><span class="d"></span> väntar granskning</span></div></div>
+              </div>
+              <div class="kcol"><div class="kcol-head">Godkänd <span class="n">1</span></div>
+                <div class="kcard" data-open-detail><div class="co">Småkök Kompakt</div><div class="meta">Levererad</div><div class="sig"><span class="pill ok" style="height:16px"><span class="d"></span> godkänd</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- prospekt + förslag -->
+        <div class="prospect">
+          <div class="panel" style="position:relative"><span class="chip" style="top:14px;right:14px">4</span>
+            <div class="panel-head"><h2>Prospekt — Altanbyggarna Väst</h2><span class="sp"></span><span class="pill violet" style="height:18px"><span class="d"></span> väntar granskning</span></div>
+            <div style="padding:16px">
+              <div class="hero-company">Altanbyggarna Väst</div>
+              <div class="note" style="margin:6px 0 14px">altanbyggarnavast.se · Göteborg · upptäckt för 2 tim sedan</div>
+              <div class="evidence">
+                <div class="ev-row"><span class="lbl">Köpsignal</span><span class="bar"><span class="fill" style="width:86%"></span></span><span class="pct">86 %</span></div>
+                <div class="ev-row"><span class="lbl">Passform</span><span class="bar"><span class="fill" style="width:74%"></span></span><span class="pct">74 %</span></div>
+                <div class="ev-row"><span class="lbl">Kontaktbar</span><span class="bar"><span class="fill" style="width:92%"></span></span><span class="pct">92 %</span></div>
+              </div>
+              <div class="sig-pills" style="margin-top:14px">
+                <span class="sig-pill">Utbyggnad &amp; altaner</span><span class="sig-pill">Målgrupp: villa</span><span class="sig-pill">Region: väst</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel" style="position:relative"><span class="chip" style="top:14px;right:14px">5</span>
+            <div class="panel-head"><h2>Föreslaget utskick</h2><span class="sp"></span><span class="pill warn" style="height:18px"><span class="d"></span> ej skickat</span></div>
+            <div style="padding:14px 16px">
+              <div class="proposal-line"><span class="ic">1</span><span>Hej, vi såg att ni bygger altaner i Göteborgsområdet…</span></div>
+              <div class="proposal-line"><span class="ic">2</span><span>Referens: er nya sida visar projekt i Hovås — stark passform.</span></div>
+              <div class="proposal-line"><span class="ic">3</span><span>Kanal: e-post (receptionist). <b>Agenten skickar aldrig utan ditt godkännande.</b></span></div>
+            </div>
+            <div class="d-actions" style="border-top:1px solid var(--border)">
+              <button class="btn primary" style="flex:1">Godkänn &amp; skicka</button>
+              <button class="btn ghost" style="flex:1">Redigera</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="note" style="position:relative"><span class="chip" style="top:-2px;left:-22px">6</span>
+          Nova visar slutsatser med evidensbalkar — inte råa analysvektorer. Rådatat (site-analysis, vektorpoäng,
+          SSRF-skydd, provider-status) ligger i backend och öppnas på begäran.
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="statusbar">
+    <span class="seg"><span class="pulse"></span><b>Nova aktiv</b></span>
+    <span class="seg">webbhämtning: på · SSRF-säkrad</span>
+    <span class="seg">providers: fail-closed</span>
+    <span class="seg right">senaste kör 08:41</span>
+    <span class="seg">⌘K sök · ? genvägar</span>
+  </div>
+</div>
+
+<!-- palette -->
+<div class="overlay" id="paletteOverlay" onclick="if(event.target===this)closePalette()">
+  <div class="palette">
+    <div class="in"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color:var(--text-3)"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="paletteInput" placeholder="Sök prospekt eller åtgärd…" /></div>
+    <div class="gl">Åtgärder</div>
+    <div class="grp"><div class="pitem sel"><span class="ic">◎</span> Granska 3 väntande förslag <span class="hint">A 1</span></div><div class="pitem"><span class="ic">＋</span> Starta ny prospektering <span class="hint">N P</span></div><div class="pitem"><span class="ic">⇄</span> Importera CSV <span class="hint">N I</span></div></div>
+    <div class="foot"><span><b>↑↓</b> navigera</span><span><b>↵</b> öppna</span><span><b>esc</b> stäng</span></div>
+  </div>
+</div>
+
+<!-- detail -->
+<div class="panel-overlay" id="panelOverlay" onclick="if(event.target===this)closeDetail()"></div>
+<aside class="detail" id="detail">
+  <div class="d-head"><div><h2>Prospekt — Altanbyggarna Väst</h2><div class="sub">altanbyggarnavast.se</div></div><button class="x" onclick="closeDetail()">✕</button></div>
+  <div class="d-body">
+    <div><span class="pill violet"><span class="d"></span> Förslag redo · väntar granskning</span></div>
+    <div><div class="kv"><span class="k">Företag</span><span class="v">Altanbyggarna Väst</span></div><div class="kv"><span class="k">Status</span><span class="v">proposal_ready</span></div><div class="kv"><span class="k">Vertikal</span><span class="v">bygg</span></div></div>
+    <div class="provenance"><button class="prov-head" onclick="toggleProv(this)">Visa analys &amp; rådata <span class="chev">⌄</span></button>
+      <div class="prov-body"><div class="kv"><span class="k">site_analysis</span><span class="v">köpsignal 0.86</span></div><div class="kv"><span class="k">provider</span><span class="v">nova-fetch (fail-closed)</span></div><div class="kv"><span class="k">request_id</span><span class="v">req_71ab…</span></div><div class="kv"><span class="k">ssrf</span><span class="v">skyddad</span></div><p class="note" style="margin-top:8px">Råa vektorer + hämtlogg i backend, visas på begäran.</p></div></div>
+  </div>
+  <div class="d-actions"><button class="btn primary" style="flex:1">Godkänn &amp; skicka</button><button class="btn ghost" style="flex:1">Redigera</button></div>
+</aside>
+
+<button class="hint-btn" onclick="toggleLegend()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg> Design-anteckningar</button>
+<div class="legend" id="legend"><div class="legend-card"><h4>Nova — varför</h4><ol>
+  <li><span class="n">1</span><span><b>Zon + löfte i rubriken</b> — "webbprospektering" och "agenten skickar aldrig själv" sätter tryggheten direkt.</span></li>
+  <li><span class="n">2</span><span><b>Läge som kort</b> — webbhämtning på/av + fail-closed visas som status, inte som en teknisk sida.</span></li>
+  <li><span class="n">3</span><span><b>Pipeline i fem steg</b> — upptäckt → analyserar → kvalificerad → förslag redo → godkänd. Ett prospekt = ett tillstånd.</span></li>
+  <li><span class="n">4</span><span><b>Evidensbalkar</b> — slutsatser med förtroende, inte råa vektorer.</span></li>
+  <li><span class="n">5</span><span><b>Förslag = utkast</b> — "ej skickat" alltid synligt tills människan godkänner.</span></li>
+  <li><span class="n">6</span><span><b>Rådata på begäran</b> — site-analysis, vektorer, provider-status i backend.</span></li>
+</ol></div></div>
+
+<script src="os-shared.js"></script>
+</body>
+</html>
