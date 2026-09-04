@@ -30,21 +30,6 @@
   font-size: 14px;
 }
 
-.wpa-app--nova-demo {
-  --wpa-blue: #6757d9;
-  --wpa-blue-dark: #5544c3;
-}
-
-.wpa-app--nova-demo .wpa-sidebar {
-  background:
-    radial-gradient(circle at 30% 0, rgba(132, 108, 238, 0.24), transparent 30%),
-    linear-gradient(180deg, #182449 0%, #121c38 100%);
-}
-
-.wpa-app--nova-demo .wpa-brand__mark {
-  background: linear-gradient(140deg, #846cef, #5369d8);
-}
-
 .wpa-app button,
 .wpa-app input,
 .wpa-app select,
