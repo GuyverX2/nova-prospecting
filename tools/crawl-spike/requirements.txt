@@ -1,0 +1,4 @@
+# ARCH-W1-001 — optional live evaluation (not required for CI)
+# Install in a separate venv; never add to services/api dependencies.
+crawl4ai>=0.4.0
+crawlee>=0.5.0

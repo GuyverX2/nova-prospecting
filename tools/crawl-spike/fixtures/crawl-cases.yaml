@@ -1,0 +1,145 @@
+# Harness copy — keep in sync with docs/architecture-program/wave-0-3/fixtures/crawl-cases.yaml
+
+task_id: ARCH-W1-001
+spike_id: SPIKE-CRAWL-001
+status: ready
+baseline_arm: keep_nova
+competitors:
+  - crawl4ai
+  - crawlee
+
+dimension_coverage:
+  ssrf_safety: [CRAWL-004, CRAWL-005]
+  robots_compliance: [CRAWL-001, CRAWL-006]
+  provenance: [CRAWL-001, CRAWL-002]
+  retries: [CRAWL-001]
+  timeout: [CRAWL-001]
+  structured_output: [CRAWL-001, CRAWL-002, CRAWL-003]
+  js_rendering: [CRAWL-002]
+  anti_bot_ops_cost: [CRAWL-002]
+  tenant_isolation: [CRAWL-007]
+  license: [CRAWL-008]
+  integration_effort: [CRAWL-001, CRAWL-008]
+
+cases:
+  - id: CRAWL-001
+    ordinal: 1
+    case_key: STATIC-B2B-SV
+    title: Swedish B2B kitchen page (static HTML)
+    fixture: static-b2b-sv.html
+    url: https://prospect.example.invalid/kitchen
+    dimensions: [structured_output, robots_compliance, provenance, timeout, retries]
+    expected_facts:
+      - field: company_name
+        value_contains: Stenköket
+      - field: email
+        value: info@stenkoket.se
+      - field: phone
+        value_contains: "08-123"
+      - field: org_number
+        value: "5560000001"
+    expected_audit:
+      h1_count: 1
+      has_viewport: true
+      json_ld_blocks_min: 1
+
+  - id: CRAWL-002
+    ordinal: 2
+    case_key: JS-SPA-SHELL
+    title: Client-rendered contact block (JS shell)
+    fixture: js-spa-shell.html
+    url: https://prospect.example.invalid/spa
+    dimensions: [js_rendering, anti_bot_ops_cost, structured_output]
+    static_fetch_limitation: true
+    expected_facts_when_js:
+      - field: company_name
+        value_contains: Dynamisk
+      - field: email
+        value: hej@dynamisk.example.invalid
+    notes: >
+      Nova fetch_public_html does not execute JavaScript. Crawl4AI/Crawlee with
+      Playwright may surface rendered content; measure ops cost separately.
+
+  - id: CRAWL-003
+    ordinal: 3
+    case_key: MINIMAL-MARKETING
+    title: Thin marketing page (negative extraction)
+    fixture: minimal-marketing.html
+    url: https://prospect.example.invalid/thin
+    dimensions: [structured_output]
+    expected_facts:
+      - field: company_name
+        value_contains: Example Marketing
+    expected_facts_absent:
+      - email
+      - phone
+      - org_number
+    expected_audit:
+      h1_count: 1
+
+  - id: CRAWL-004
+    ordinal: 4
+    case_key: SSRF-LOOPBACK
+    title: Loopback host must be blocked
+    ssrf_probe: true
+    url: http://127.0.0.1/
+    dimensions: [ssrf_safety]
+    expect_blocked: true
+    blocked_codes: [URL_HOST_BLOCKED, PRIVATE_NETWORK_BLOCKED]
+
+  - id: CRAWL-005
+    ordinal: 5
+    case_key: SSRF-METADATA
+    title: Cloud metadata host must be blocked
+    ssrf_probe: true
+    url: http://metadata.google.internal/computeMetadata/v1/
+    dimensions: [ssrf_safety]
+    expect_blocked: true
+    blocked_codes: [URL_HOST_BLOCKED]
+
+  - id: CRAWL-006
+    ordinal: 6
+    case_key: ROBOTS-RESPECT
+    title: Nova declares robots.txt respect
+    capability_only: true
+    dimensions: [robots_compliance]
+    baseline_must: robots_respected
+
+  - id: CRAWL-007
+    ordinal: 7
+    case_key: TENANT-ISOLATION
+    title: Fetch cache must be tenant-scoped if introduced
+    capability_only: true
+    dimensions: [tenant_isolation]
+    requirement: no_cross_tenant_url_cache
+
+  - id: CRAWL-008
+    ordinal: 8
+    case_key: LICENSE-REVIEW
+    title: Library license posture
+    capability_only: true
+    dimensions: [license, integration_effort]
+    licenses:
+      keep_nova: internal
+      crawl4ai: Apache-2.0 + attribution notice
+      crawlee: Apache-2.0
+
+capability_rubric:
+  dimensions:
+    - ssrf_safety
+    - robots_compliance
+    - provenance
+    - retries
+    - timeout
+    - structured_output
+    - js_rendering
+    - anti_bot_ops_cost
+    - tenant_isolation
+    - license
+    - integration_effort
+
+decision_options:
+  - KEEP
+  - HARVEST
+  - INTEGRATE
+  - REJECT
