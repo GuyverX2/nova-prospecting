@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
-import { loadStoredApiBase, resolveApiUrl } from "./apiBase";
+import { fetchWithTimeout, loadStoredApiBase, resolveApiUrl } from "./apiBase";
 import {
   analyzeProspect,
   approveProposal,
@@ -26,6 +26,7 @@ import {
 import "./websiteProspectAgent.css";
 import { bcp47Locale } from "../../shared/ui/locale/format";
 import { tr } from "../../shared/ui/locale/tr";
+import { readableError } from "./appShared";
 
 
 
@@ -635,7 +636,7 @@ function NovaLoginGate({
       const body = new URLSearchParams();
       body.set("username", email.trim());
       body.set("password", password);
-      const response = await fetch(resolveApiUrl(apiBase, "/api/v1/auth/login"), {
+      const response = await fetchWithTimeout(resolveApiUrl(apiBase, "/api/v1/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body
@@ -647,7 +648,8 @@ function NovaLoginGate({
       window.localStorage.setItem("salesos.salesDeskToken", data.access_token);
       onLogin(data.access_token);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Inloggningen misslyckades.");
+      // AbortError (fetch timeout) maps to an operator-readable message.
+      setError(readableError(err));
     } finally {
       setBusy(false);
     }
