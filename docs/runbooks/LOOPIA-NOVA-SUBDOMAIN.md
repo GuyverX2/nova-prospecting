@@ -9,7 +9,7 @@ DNS + Caddy-routing, inte en ny frontend-app eller en ny API-instans.
 Skapa följande post i DNS-zonen för `salesos.se`:
 
 | Typ | Host/namn | Värde | TTL |
-|---|---|---|---:|
+| --- | --- | --- | --- |
 | A | `nova` | `157.180.64.16` | 300 eller 3600 |
 
 `157.180.64.16` är den dokumenterade SalesOS-hel1-adressen. Kontrollera den mot
