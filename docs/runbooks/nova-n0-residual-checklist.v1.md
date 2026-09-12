@@ -2,7 +2,7 @@
 
 **Created:** 2026-09-01  
 **Executor:** Operator (Mattias) + counsel (N0-7) — agents prepare only  
-**Authority:** [008-EX-008-nova-residuals.md](../cursor-execution/008-EX-008-nova-residuals.md) · [nova-status-and-completion-todo.v1.md](../current-state/nova-status-and-completion-todo.v1.md) · [website-prospecting-agent.v1.md](./website-prospecting-agent.v1.md)
+**Authority:** [008-EX-008-nova-residuals.md](../archive/completed/cursor-execution/008-EX-008-nova-residuals.md) · [nova-status-and-completion-todo.v1.md](../current-state/nova-status-and-completion-todo.v1.md) · [website-prospecting-agent.v1.md](./website-prospecting-agent.v1.md)
 
 **STOP:** No secrets in git/chat · no `.env` commits · rotate keys if ever pasted in chat · no auto-send without human approve.
 
