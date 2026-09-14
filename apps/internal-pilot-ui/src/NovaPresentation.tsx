@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MUSIC_TAIL, NovaAudioEngine } from "./novaAudio";
 import "./presentation.css";
 import "./nova.css";
-import { tr } from "../../shared/ui/locale/tr";
+import { tr } from "@salesos/shared-ui/locale";
 
 
 type SceneId = "opening" | "problem" | "discovery" | "analysis" | "proposal" | "control" | "live" | "closing";

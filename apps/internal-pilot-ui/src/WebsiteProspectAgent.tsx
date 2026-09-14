@@ -24,8 +24,8 @@ import {
   type ApiProspectingSummary
 } from "./websiteProspectingApi";
 import "./websiteProspectAgent.css";
-import { bcp47Locale } from "../../shared/ui/locale/format";
-import { tr } from "../../shared/ui/locale/tr";
+import { bcp47Locale } from "@salesos/shared-ui/locale";
+import { tr } from "@salesos/shared-ui/locale";
 import { readableError } from "./appShared";
 
 
