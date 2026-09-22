@@ -31,12 +31,12 @@ class DeliveryReceipt:
     external_sent: bool
 
 
-def opt_out_token(tenant_id: int, prospect_id: str, email: str) -> str:
+def opt_out_token(tenant_id: str, prospect_id: str, email: str) -> str:
     message = f"{tenant_id}:{prospect_id}:{email.strip().lower()}".encode("utf-8")
     return hmac.new(settings.JWT_SECRET.encode("utf-8"), message, hashlib.sha256).hexdigest()
 
 
-def verify_opt_out_token(token: str, tenant_id: int, prospect_id: str, email: str) -> bool:
+def verify_opt_out_token(token: str, tenant_id: str, prospect_id: str, email: str) -> bool:
     return hmac.compare_digest(token, opt_out_token(tenant_id, prospect_id, email))
 
 

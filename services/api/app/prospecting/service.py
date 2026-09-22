@@ -13,11 +13,10 @@ from urllib.parse import urlsplit
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.auth import PlatformPrincipal
 from app.core.config import settings
-from app.models.sales_desk import SalesDeskCase, SalesDeskCustomer, SalesDeskLead
-from app.models.user import User
+from app.crm.client import CrmRejected, CrmUnavailable, SalesOSCrmClient
 from app.prospecting.analyzer import WebsiteAuditError, analyze_html, fetch_public_html, normalize_public_url
-from app.schemas.sales_desk import CaseStatus, LeadStatus, SalesDeskPriority
 from app.prospecting.discovery import DiscoveryProviderError, discover_companies, provider_status
 from app.prospecting.models import (
     ProspectSuppression,
@@ -86,15 +85,14 @@ def _domain(url: str) -> str:
     return hostname[4:] if hostname.startswith("www.") else hostname
 
 
-def _audit(db: Session, ctx: TenantContext, user: User, action: str, target_type: str, target_id: str, request_id: str | None, after: dict | None = None) -> None:
+def _audit(db: Session, ctx: TenantContext, principal: PlatformPrincipal, action: str, target_type: str, target_id: str, request_id: str | None, after: dict | None = None) -> None:
     record_audit(
         db,
         tenant_id=ctx.tenant_id,
-        actor_user_id=user.id,
+        actor_subject=principal.sub,
         action_type=action,
         target_type=target_type,
         target_id=target_id,
-        tenant_profile_id=ctx.active_profile_id,
         request_id=request_id,
         after=after,
     )
@@ -166,7 +164,7 @@ def proposal_dict(row: WebsiteProposal) -> dict:
         "email_subject": row.email_subject,
         "email_body": row.email_body,
         "review": _load(row.review_json, {}),
-        "approved_by_user_id": row.approved_by_user_id,
+        "approved_by_subject": row.approved_by_subject,
         "approved_at": row.approved_at,
         "share_expires_at": row.share_expires_at,
         "delivery_status": row.delivery_status,
@@ -227,12 +225,12 @@ def prospect_dict(db: Session, row: WebsiteProspect, *, include_latest: bool = T
     }
 
 
-def create_campaign(db: Session, ctx: TenantContext, user: User, payload: CampaignCreate, *, request_id: str | None = None) -> dict:
+def create_campaign(db: Session, ctx: TenantContext, principal: PlatformPrincipal, payload: CampaignCreate, *, request_id: str | None = None) -> dict:
     _require_write(ctx)
     row = ProspectingCampaign(
         id=new_campaign_id(),
         tenant_id=ctx.tenant_id,
-        created_by_user_id=user.id,
+        created_by_subject=principal.sub,
         name=payload.name.strip(),
         status="active",
         mode=payload.mode,
@@ -245,7 +243,7 @@ def create_campaign(db: Session, ctx: TenantContext, user: User, payload: Campai
         source_provider=payload.source_provider,
     )
     db.add(row)
-    _audit(db, ctx, user, "prospecting.campaign_created", "prospecting_campaign", row.id, request_id, {"mode": row.mode, "provider": row.source_provider})
+    _audit(db, ctx, principal, "prospecting.campaign_created", "prospecting_campaign", row.id, request_id, {"mode": row.mode, "provider": row.source_provider})
     db.commit()
     db.refresh(row)
     return campaign_dict(row)
@@ -263,7 +261,7 @@ def _require_campaign(db: Session, ctx: TenantContext, campaign_id: str) -> Pros
     return row
 
 
-def create_prospect(db: Session, ctx: TenantContext, user: User, payload: ProspectCreate, *, request_id: str | None = None) -> dict:
+def create_prospect(db: Session, ctx: TenantContext, principal: PlatformPrincipal, payload: ProspectCreate, *, request_id: str | None = None) -> dict:
     _require_write(ctx)
     if payload.campaign_id:
         _require_campaign(db, ctx, payload.campaign_id)
@@ -278,7 +276,7 @@ def create_prospect(db: Session, ctx: TenantContext, user: User, payload: Prospe
         id=new_prospect_id(),
         tenant_id=ctx.tenant_id,
         campaign_id=payload.campaign_id,
-        assigned_user_id=user.id,
+        assigned_subject=principal.sub,
         company_name=payload.company_name.strip(),
         organization_number=payload.organization_number,
         website_url=normalize_public_url(payload.website_url),
@@ -304,7 +302,7 @@ def create_prospect(db: Session, ctx: TenantContext, user: User, payload: Prospe
         source_checked_at=now,
     )
     db.add(row)
-    _audit(db, ctx, user, "prospecting.prospect_created", "website_prospect", row.id, request_id, {"domain": domain, "source_provider": row.source_provider})
+    _audit(db, ctx, principal, "prospecting.prospect_created", "website_prospect", row.id, request_id, {"domain": domain, "source_provider": row.source_provider})
     db.commit()
     db.refresh(row)
     return prospect_dict(db, row)
@@ -317,7 +315,7 @@ _CSV_REQUIRED_COLUMNS = {"company_name", "website_url"}
 def bulk_create_prospects_from_csv(
     db: Session,
     ctx: TenantContext,
-    user: User,
+    principal: PlatformPrincipal,
     payload: ProspectBulkCsvRequest,
     *,
     request_id: str | None = None,
@@ -396,7 +394,7 @@ def bulk_create_prospects_from_csv(
             id=new_prospect_id(),
             tenant_id=ctx.tenant_id,
             campaign_id=payload.campaign_id,
-            assigned_user_id=user.id,
+            assigned_subject=principal.sub,
             company_name=company_name,
             website_url=normalized_url,
             normalized_domain=domain,
@@ -418,7 +416,7 @@ def bulk_create_prospects_from_csv(
     _audit(
         db,
         ctx,
-        user,
+        principal,
         "prospecting.prospects_bulk_csv",
         "website_prospect",
         created[0]["id"] if created else "none",
@@ -434,7 +432,7 @@ def bulk_create_prospects_from_csv(
     }
 
 
-def _latest_maps(db: Session, tenant_id: int, prospect_ids: list[str]) -> tuple[dict[str, WebsiteAnalysis], dict[str, WebsiteProposal]]:
+def _latest_maps(db: Session, tenant_id: str, prospect_ids: list[str]) -> tuple[dict[str, WebsiteAnalysis], dict[str, WebsiteProposal]]:
     if not prospect_ids:
         return {}, {}
     analyses = (
@@ -489,7 +487,7 @@ def _crm_lead_source(prospect_id: str) -> str:
     return f"prospecting:{prospect_id}"
 
 
-def _latest_complete_analysis_id(db: Session, tenant_id: int, prospect_id: str) -> str | None:
+def _latest_complete_analysis_id(db: Session, tenant_id: str, prospect_id: str) -> str | None:
     row = (
         db.query(WebsiteAnalysis)
         .filter(
@@ -506,13 +504,13 @@ def _latest_complete_analysis_id(db: Session, tenant_id: int, prospect_id: str) 
 def promote_prospect_to_crm(
     db: Session,
     ctx: TenantContext,
-    user: User,
+    principal: PlatformPrincipal,
     prospect_id: str,
     payload: ProspectPromoteRequest,
     *,
     request_id: str | None = None,
 ) -> dict:
-    """Create tenant CRM customer + lead + case from a Nova prospect (no outbound)."""
+    """Hand a prospect to SalesOS CRM without coupling Nova to its ORM."""
     _require_write(ctx)
     prospect = require_prospect(db, ctx, prospect_id)
     if prospect.do_not_contact:
@@ -523,115 +521,64 @@ def promote_prospect_to_crm(
     if not vertical_id or not brand_id:
         raise ProspectingError(422, "vertical_id and brand_id are required", code="CRM_SCOPE_REQUIRED")
 
-    source = _crm_lead_source(prospect.id)
-    existing_lead = (
-        db.query(SalesDeskLead)
-        .join(SalesDeskCustomer, SalesDeskCustomer.id == SalesDeskLead.customer_id)
-        .filter(SalesDeskCustomer.tenant_id == ctx.tenant_id, SalesDeskLead.source == source)
-        .first()
-    )
     evidence_id = _latest_complete_analysis_id(db, ctx.tenant_id, prospect.id)
-    if existing_lead is not None:
-        existing_case = (
-            db.query(SalesDeskCase)
-            .filter(SalesDeskCase.lead_id == existing_lead.id, SalesDeskCase.tenant_id == ctx.tenant_id)
-            .order_by(SalesDeskCase.created_at.desc())
-            .first()
-        )
-        if existing_case is None:
-            raise ProspectingError(409, "Promoted lead exists without a case", code="PROMOTE_INCOMPLETE")
-        return {
-            "prospect_id": prospect.id,
-            "customer_id": existing_lead.customer_id,
-            "lead_id": existing_lead.id,
-            "case_id": existing_case.id,
-            "already_promoted": True,
-            "evidence_analysis_id": evidence_id,
-            "crm_lead_path": f"/customer/leads/{existing_lead.id}",
-            "crm_case_path": f"/customer/cases/{existing_case.id}",
-        }
-
-    # Never copy contact email into fixtures; live promote only when verified + requested.
     customer_email = None
     if payload.include_contact_email and prospect.contact_verified and prospect.contact_email:
         customer_email = prospect.contact_email
-
     case_title = (payload.case_title or f"Nova — {prospect.company_name}").strip()
-    customer = SalesDeskCustomer(
-        name=prospect.company_name.strip(),
-        email=customer_email,
-        phone=None,
-        vertical_id=vertical_id,
-        vertical_ids=[vertical_id],
-        brand_id=brand_id,
-        tenant_id=ctx.tenant_id,
-        crm_workspace_id=ctx.workspace_id,
-        tenant_profile_id=ctx.active_profile_id,
-        owner_user_id=user.id,
-    )
-    db.add(customer)
-    db.flush()
+    crm_payload = {
+        "tenant_id": ctx.tenant_id,
+        "source": _crm_lead_source(prospect.id),
+        "company_name": prospect.company_name.strip(),
+        "vertical_id": vertical_id,
+        "brand_id": brand_id,
+        "case_title": case_title,
+        "assigned_subject": prospect.assigned_subject or principal.sub,
+        "contact_email": customer_email,
+        "evidence_analysis_id": evidence_id,
+    }
+    try:
+        crm = SalesOSCrmClient().promote_prospect(bearer_token=principal.bearer_token, tenant_id=ctx.tenant_id, prospect_id=prospect.id, payload=crm_payload)
+    except CrmUnavailable as exc:
+        raise ProspectingError(503, "SalesOS CRM is unavailable", code="CRM_UNAVAILABLE") from exc
+    except CrmRejected as exc:
+        raise ProspectingError(502, "SalesOS CRM rejected the promotion", code="CRM_REJECTED") from exc
 
-    lead = SalesDeskLead(
-        customer_id=customer.id,
-        source=source,
-        status=LeadStatus.NEW.value,
-        priority=SalesDeskPriority.MEDIUM.value,
-        assigned_user_id=prospect.assigned_user_id or user.id,
-    )
-    db.add(lead)
-    db.flush()
-
-    case = SalesDeskCase(
-        customer_id=customer.id,
-        lead_id=lead.id,
-        tenant_id=ctx.tenant_id,
-        tenant_profile_id=customer.tenant_profile_id,
-        vertical_id=vertical_id,
-        brand_id=brand_id,
-        title=case_title,
-        status=CaseStatus.OPEN.value,
-        assigned_user_id=prospect.assigned_user_id or user.id,
-    )
-    db.add(case)
+    # The CRM call has succeeded; only now is Nova's local workflow advanced.
     prospect.status = "contacted"
     prospect.updated_at = _now()
-    db.flush()
 
     _audit(
         db,
         ctx,
-        user,
+        principal,
         "prospecting.prospect_promoted",
         "website_prospect",
         prospect.id,
         request_id,
         {
-            "customer_id": customer.id,
-            "lead_id": lead.id,
-            "case_id": case.id,
+            "customer_id": crm.customer_id,
+            "lead_id": crm.lead_id,
+            "case_id": crm.case_id,
             "domain": prospect.normalized_domain,
             "evidence_analysis_id": evidence_id,
             "include_contact_email": bool(customer_email),
         },
     )
     db.commit()
-    db.refresh(customer)
-    db.refresh(lead)
-    db.refresh(case)
     return {
         "prospect_id": prospect.id,
-        "customer_id": customer.id,
-        "lead_id": lead.id,
-        "case_id": case.id,
-        "already_promoted": False,
+        "customer_id": crm.customer_id,
+        "lead_id": crm.lead_id,
+        "case_id": crm.case_id,
+        "already_promoted": crm.already_promoted,
         "evidence_analysis_id": evidence_id,
-        "crm_lead_path": f"/customer/leads/{lead.id}",
-        "crm_case_path": f"/customer/cases/{case.id}",
+        "crm_lead_path": crm.lead_path,
+        "crm_case_path": crm.case_path,
     }
 
 
-def update_prospect(db: Session, ctx: TenantContext, user: User, prospect_id: str, payload: ProspectUpdate, *, request_id: str | None = None) -> dict:
+def update_prospect(db: Session, ctx: TenantContext, principal: PlatformPrincipal, prospect_id: str, payload: ProspectUpdate, *, request_id: str | None = None) -> dict:
     _require_write(ctx)
     row = require_prospect(db, ctx, prospect_id)
     changes = payload.model_dump(exclude_unset=True)
@@ -647,9 +594,9 @@ def update_prospect(db: Session, ctx: TenantContext, user: User, prospect_id: st
     if "contact_verified" in changes:
         row.contact_verified_at = _now() if changes["contact_verified"] else None
     if changes.get("do_not_contact") and row.contact_email:
-        _upsert_suppression(db, ctx.tenant_id, row.contact_email, "operator", "operator", row.id, user.id)
+        _upsert_suppression(db, ctx.tenant_id, row.contact_email, "operator", "operator", row.id, principal.sub)
     row.updated_at = _now()
-    _audit(db, ctx, user, "prospecting.prospect_updated", "website_prospect", row.id, request_id, {"fields": sorted(changes)})
+    _audit(db, ctx, principal, "prospecting.prospect_updated", "website_prospect", row.id, request_id, {"fields": sorted(changes)})
     db.commit()
     db.refresh(row)
     return prospect_dict(db, row)
@@ -691,7 +638,7 @@ def _merge_pagespeed(result: dict, pagespeed: dict) -> None:
     )
 
 
-def run_analysis(db: Session, ctx: TenantContext, user: User, prospect_id: str, payload: AnalysisRequest, *, request_id: str | None = None) -> dict:
+def run_analysis(db: Session, ctx: TenantContext, principal: PlatformPrincipal, prospect_id: str, payload: AnalysisRequest, *, request_id: str | None = None) -> dict:
     _require_write(ctx)
     prospect = require_prospect(db, ctx, prospect_id)
     url = normalize_public_url(payload.website_url or prospect.website_url)
@@ -699,7 +646,7 @@ def run_analysis(db: Session, ctx: TenantContext, user: User, prospect_id: str, 
         id=new_analysis_id(),
         tenant_id=ctx.tenant_id,
         prospect_id=prospect.id,
-        requested_by_user_id=user.id,
+        requested_by_subject=principal.sub,
         status="running",
         analyzed_url=url,
     )
@@ -745,7 +692,7 @@ def run_analysis(db: Session, ctx: TenantContext, user: User, prospect_id: str, 
         row.error_detail = exc.detail
         db.commit()
         raise ProspectingError(exc.status_code, exc.detail, code=exc.code) from exc
-    _audit(db, ctx, user, "prospecting.analysis_completed", "website_analysis", row.id, request_id, {"prospect_id": prospect.id, "score": row.improvement_score, "evidence_count": len(result["evidence"])})
+    _audit(db, ctx, principal, "prospecting.analysis_completed", "website_analysis", row.id, request_id, {"prospect_id": prospect.id, "score": row.improvement_score, "evidence_count": len(result["evidence"])})
     db.commit()
     db.refresh(row)
     return analysis_dict(row)
@@ -761,7 +708,7 @@ def _latest_complete_analysis(db: Session, ctx: TenantContext, prospect_id: str,
     return row
 
 
-def generate_proposal(db: Session, ctx: TenantContext, user: User, prospect_id: str, analysis_id: str | None = None, *, request_id: str | None = None) -> dict:
+def generate_proposal(db: Session, ctx: TenantContext, principal: PlatformPrincipal, prospect_id: str, analysis_id: str | None = None, *, request_id: str | None = None) -> dict:
     _require_write(ctx)
     prospect = require_prospect(db, ctx, prospect_id)
     analysis = _latest_complete_analysis(db, ctx, prospect.id, analysis_id)
@@ -788,7 +735,7 @@ def generate_proposal(db: Session, ctx: TenantContext, user: User, prospect_id: 
         tenant_id=ctx.tenant_id,
         prospect_id=prospect.id,
         analysis_id=analysis.id,
-        created_by_user_id=user.id,
+        created_by_subject=principal.sub,
         version=current_max + 1,
         status="draft",
         headline=f"Ett nytt digitalt upplägg för {prospect.company_name}",
@@ -812,7 +759,7 @@ def generate_proposal(db: Session, ctx: TenantContext, user: User, prospect_id: 
     db.add(row)
     prospect.status = "proposal_ready"
     prospect.updated_at = _now()
-    _audit(db, ctx, user, "prospecting.proposal_generated", "website_proposal", row.id, request_id, {"prospect_id": prospect.id, "analysis_id": analysis.id, "version": row.version})
+    _audit(db, ctx, principal, "prospecting.proposal_generated", "website_proposal", row.id, request_id, {"prospect_id": prospect.id, "analysis_id": analysis.id, "version": row.version})
     db.commit()
     db.refresh(row)
     return proposal_dict(row)
@@ -825,7 +772,7 @@ def require_proposal(db: Session, ctx: TenantContext, proposal_id: str) -> Websi
     return row
 
 
-def update_proposal(db: Session, ctx: TenantContext, user: User, proposal_id: str, payload: ProposalUpdate, *, request_id: str | None = None) -> dict:
+def update_proposal(db: Session, ctx: TenantContext, principal: PlatformPrincipal, proposal_id: str, payload: ProposalUpdate, *, request_id: str | None = None) -> dict:
     _require_write(ctx)
     row = require_proposal(db, ctx, proposal_id)
     if row.status == "approved":
@@ -836,17 +783,17 @@ def update_proposal(db: Session, ctx: TenantContext, user: User, proposal_id: st
         target = mapping.get(key, key)
         setattr(row, target, _json(value) if key in mapping else value)
     row.updated_at = _now()
-    _audit(db, ctx, user, "prospecting.proposal_updated", "website_proposal", row.id, request_id, {"fields": sorted(changes)})
+    _audit(db, ctx, principal, "prospecting.proposal_updated", "website_proposal", row.id, request_id, {"fields": sorted(changes)})
     db.commit()
     db.refresh(row)
     return proposal_dict(row)
 
 
-def _is_suppressed(db: Session, tenant_id: int, email: str) -> bool:
+def _is_suppressed(db: Session, tenant_id: str, email: str) -> bool:
     return db.query(ProspectSuppression).filter(ProspectSuppression.tenant_id == tenant_id, ProspectSuppression.normalized_email == email.strip().lower()).first() is not None
 
 
-def approve_proposal(db: Session, ctx: TenantContext, user: User, proposal_id: str, review: ProposalReview, *, request_id: str | None = None) -> dict:
+def approve_proposal(db: Session, ctx: TenantContext, principal: PlatformPrincipal, proposal_id: str, review: ProposalReview, *, request_id: str | None = None) -> dict:
     _require_write(ctx)
     row = require_proposal(db, ctx, proposal_id)
     prospect = require_prospect(db, ctx, row.prospect_id)
@@ -862,19 +809,19 @@ def approve_proposal(db: Session, ctx: TenantContext, user: User, proposal_id: s
     if not analysis.evidence_json or len(_load(analysis.evidence_json, [])) < 1:
         raise ProspectingError(409, "The analysis has no evidence packet", code="ANALYSIS_EVIDENCE_REQUIRED")
     row.status = "approved"
-    row.review_json = _json({**checks, "reviewed_by_user_id": user.id, "reviewed_at": _now().isoformat()})
-    row.approved_by_user_id = user.id
+    row.review_json = _json({**checks, "reviewed_by_subject": principal.sub, "reviewed_at": _now().isoformat()})
+    row.approved_by_subject = principal.sub
     row.approved_at = _now()
     row.updated_at = _now()
     prospect.status = "approved"
     prospect.updated_at = _now()
-    _audit(db, ctx, user, "prospecting.proposal_approved", "website_proposal", row.id, request_id, {"prospect_id": prospect.id, "checks": {key: value for key, value in checks.items() if key != "reviewer_note"}})
+    _audit(db, ctx, principal, "prospecting.proposal_approved", "website_proposal", row.id, request_id, {"prospect_id": prospect.id, "checks": {key: value for key, value in checks.items() if key != "reviewer_note"}})
     db.commit()
     db.refresh(row)
     return proposal_dict(row)
 
 
-def create_share(db: Session, ctx: TenantContext, user: User, proposal_id: str, expires_in_days: int, *, request_id: str | None = None) -> dict:
+def create_share(db: Session, ctx: TenantContext, principal: PlatformPrincipal, proposal_id: str, expires_in_days: int, *, request_id: str | None = None) -> dict:
     _require_write(ctx)
     row = require_proposal(db, ctx, proposal_id)
     if row.status != "approved":
@@ -882,7 +829,7 @@ def create_share(db: Session, ctx: TenantContext, user: User, proposal_id: str, 
     token = secrets.token_urlsafe(32)
     row.share_token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
     row.share_expires_at = _now() + timedelta(days=expires_in_days)
-    _audit(db, ctx, user, "prospecting.share_created", "website_proposal", row.id, request_id, {"expires_at": row.share_expires_at.isoformat()})
+    _audit(db, ctx, principal, "prospecting.share_created", "website_proposal", row.id, request_id, {"expires_at": row.share_expires_at.isoformat()})
     db.commit()
     return {
         "proposal_id": row.id,
@@ -928,17 +875,17 @@ def render_proposal_html(
 </style></head><body><main><header><small>KUNDANPASSAT WEBBFÖRSLAG</small><h1>{escape(row.headline)}</h1><p>{escape(row.summary)}</p>{film_link}</header><h2>Analys av nuläget</h2><p class="score">Förbättringspotential {analysis.improvement_score}/100</p><div class="findings">{finding_html}</div><h2>Föreslagen webbstruktur</h2><div class="sitemap">{sitemap}</div><h2>Tre genomförandenivåer</h2><div class="packages">{package_html}</div><footer>Förslag version {row.version} · {escape(prospect.company_name)} · Giltigt till {row.share_expires_at.date().isoformat() if row.share_expires_at else '—'}<br>Utskrift: använd webbläsarens Skriv ut → Spara som PDF.</footer></main></body></html>"""
 
 
-def deliver_proposal(db: Session, ctx: TenantContext, user: User, proposal_id: str, payload: DeliveryRequest, *, request_id: str | None = None) -> dict:
+def deliver_proposal(db: Session, ctx: TenantContext, principal: PlatformPrincipal, proposal_id: str, payload: DeliveryRequest, *, request_id: str | None = None) -> dict:
     _require_write(ctx)
     row = require_proposal(db, ctx, proposal_id)
     prospect = require_prospect(db, ctx, row.prospect_id)
-    if row.status != "approved" or row.approved_by_user_id is None:
+    if row.status != "approved" or row.approved_by_subject is None:
         raise ProspectingError(409, "Human approval is required before delivery", code="PROPOSAL_NOT_APPROVED")
     recipient = (payload.test_recipient or prospect.contact_email or "").strip().lower()
     if not recipient or "@" not in recipient:
         raise ProspectingError(409, "A valid recipient is required", code="RECIPIENT_REQUIRED")
     is_test = payload.test_recipient is not None
-    if is_test and recipient != user.email.strip().lower():
+    if is_test and recipient != principal.sub.strip().lower():
         raise ProspectingError(403, "Test delivery may only be sent to the authenticated operator", code="TEST_RECIPIENT_FORBIDDEN")
     if not is_test:
         if not prospect.contact_verified:
@@ -995,7 +942,7 @@ def deliver_proposal(db: Session, ctx: TenantContext, user: User, proposal_id: s
     row.delivery_id = receipt.delivery_id
     row.delivered_at = _now() if receipt.external_sent else None
     row.updated_at = _now()
-    _audit(db, ctx, user, "prospecting.delivery_processed", "website_proposal", row.id, request_id, {"provider": receipt.provider, "external_sent": receipt.external_sent, "recipient_domain": recipient.split("@")[-1], "test": is_test})
+    _audit(db, ctx, principal, "prospecting.delivery_processed", "website_proposal", row.id, request_id, {"provider": receipt.provider, "external_sent": receipt.external_sent, "recipient_domain": recipient.split("@")[-1], "test": is_test})
     db.commit()
     return {
         "proposal_id": row.id,
@@ -1008,31 +955,31 @@ def deliver_proposal(db: Session, ctx: TenantContext, user: User, proposal_id: s
     }
 
 
-def _upsert_suppression(db: Session, tenant_id: int, email: str, reason: str, source: str, prospect_id: str | None, user_id: int | None) -> ProspectSuppression:
+def _upsert_suppression(db: Session, tenant_id: str, email: str, reason: str, source: str, prospect_id: str | None, subject: str | None) -> ProspectSuppression:
     normalized = email.strip().lower()
     row = db.query(ProspectSuppression).filter(ProspectSuppression.tenant_id == tenant_id, ProspectSuppression.normalized_email == normalized).first()
     if row:
         row.reason = reason
         row.source = source
         return row
-    row = ProspectSuppression(id=new_suppression_id(), tenant_id=tenant_id, prospect_id=prospect_id, normalized_email=normalized, reason=reason, source=source, created_by_user_id=user_id)
+    row = ProspectSuppression(id=new_suppression_id(), tenant_id=tenant_id, prospect_id=prospect_id, normalized_email=normalized, reason=reason, source=source, created_by_subject=subject)
     db.add(row)
     return row
 
 
-def add_suppression(db: Session, ctx: TenantContext, user: User, payload: SuppressionCreate, *, request_id: str | None = None) -> dict:
+def add_suppression(db: Session, ctx: TenantContext, principal: PlatformPrincipal, payload: SuppressionCreate, *, request_id: str | None = None) -> dict:
     _require_write(ctx)
     email = payload.email.strip().lower()
     if "@" not in email:
         raise ProspectingError(422, "A valid email is required", code="EMAIL_INVALID")
     if payload.prospect_id:
         require_prospect(db, ctx, payload.prospect_id)
-    row = _upsert_suppression(db, ctx.tenant_id, email, payload.reason, "operator", payload.prospect_id, user.id)
+    row = _upsert_suppression(db, ctx.tenant_id, email, payload.reason, "operator", payload.prospect_id, principal.sub)
     if payload.prospect_id:
         prospect = require_prospect(db, ctx, payload.prospect_id)
         prospect.do_not_contact = True
         prospect.updated_at = _now()
-    _audit(db, ctx, user, "prospecting.contact_suppressed", "prospect_suppression", row.id, request_id, {"reason": payload.reason})
+    _audit(db, ctx, principal, "prospecting.contact_suppressed", "prospect_suppression", row.id, request_id, {"reason": payload.reason})
     db.commit()
     return {"id": row.id, "email": row.normalized_email, "reason": row.reason, "source": row.source, "created_at": row.created_at}
 
@@ -1048,7 +995,7 @@ def public_opt_out(db: Session, prospect_id: str, token: str) -> dict:
     return {"status": "suppressed", "message": "Adressen kommer inte att få fler prospekteringsutskick.", "reference": row.id}
 
 
-def discover_for_campaign(db: Session, ctx: TenantContext, user: User, campaign_id: str, query: str, region: str | None, limit: int, *, request_id: str | None = None) -> dict:
+def discover_for_campaign(db: Session, ctx: TenantContext, principal: PlatformPrincipal, campaign_id: str, query: str, region: str | None, limit: int, *, request_id: str | None = None) -> dict:
     _require_write(ctx)
     campaign = _require_campaign(db, ctx, campaign_id)
     try:
@@ -1071,7 +1018,7 @@ def discover_for_campaign(db: Session, ctx: TenantContext, user: User, campaign_
             skipped.append({"company_name": company.company_name, "reason": "duplicate_domain", "prospect_id": duplicate.id})
             continue
         row = WebsiteProspect(
-            id=new_prospect_id(), tenant_id=ctx.tenant_id, campaign_id=campaign.id, assigned_user_id=user.id,
+            id=new_prospect_id(), tenant_id=ctx.tenant_id, campaign_id=campaign.id, assigned_subject=principal.sub,
             company_name=company.company_name, website_url=normalize_public_url(company.website_url), normalized_domain=domain,
             industry=company.industry or campaign.industry, city=company.city, qualification_score=campaign.min_score,
             estimated_value_sek=0, status="qualified", legal_basis="legitimate_interest_b2b",
@@ -1081,7 +1028,7 @@ def discover_for_campaign(db: Session, ctx: TenantContext, user: User, campaign_
         db.add(row)
         db.flush()
         created.append(prospect_dict(db, row, include_latest=False))
-    _audit(db, ctx, user, "prospecting.discovery_completed", "prospecting_campaign", campaign.id, request_id, {"created": len(created), "skipped": len(skipped), "provider": settings.PROSPECTING_DISCOVERY_PROVIDER})
+    _audit(db, ctx, principal, "prospecting.discovery_completed", "prospecting_campaign", campaign.id, request_id, {"created": len(created), "skipped": len(skipped), "provider": settings.PROSPECTING_DISCOVERY_PROVIDER})
     db.commit()
     return {"created": created, "skipped": skipped, "provider": settings.PROSPECTING_DISCOVERY_PROVIDER}
 
@@ -1106,7 +1053,7 @@ def get_policy(db: Session, ctx: TenantContext) -> dict:
     return policy_dict(row, ctx)
 
 
-def update_policy(db: Session, ctx: TenantContext, user: User, payload: ProspectingPolicyUpdate, *, request_id: str | None = None) -> dict:
+def update_policy(db: Session, ctx: TenantContext, principal: PlatformPrincipal, payload: ProspectingPolicyUpdate, *, request_id: str | None = None) -> dict:
     _require_write(ctx)
     if payload.mode == "rules_assisted" and not settings.AGENT_SCHEDULER_ENABLED:
         # Rules may still be persisted and previewed, but background execution stays visibly off.
@@ -1115,13 +1062,13 @@ def update_policy(db: Session, ctx: TenantContext, user: User, payload: Prospect
         scheduler_warning = False
     row = db.query(ProspectingPolicy).filter(ProspectingPolicy.tenant_id == ctx.tenant_id).first()
     if row is None:
-        row = ProspectingPolicy(tenant_id=ctx.tenant_id, updated_by_user_id=user.id)
+        row = ProspectingPolicy(tenant_id=ctx.tenant_id, updated_by_subject=principal.sub)
         db.add(row)
     for key, value in payload.model_dump().items():
         setattr(row, key, value)
-    row.updated_by_user_id = user.id
+    row.updated_by_subject = principal.sub
     row.updated_at = _now()
-    _audit(db, ctx, user, "prospecting.policy_updated", "prospecting_policy", str(ctx.tenant_id), request_id, {**payload.model_dump(), "scheduler_warning": scheduler_warning, "real_email_enabled": settings.PROSPECTING_REAL_EMAIL_ENABLED})
+    _audit(db, ctx, principal, "prospecting.policy_updated", "prospecting_policy", str(ctx.tenant_id), request_id, {**payload.model_dump(), "scheduler_warning": scheduler_warning, "real_email_enabled": settings.PROSPECTING_REAL_EMAIL_ENABLED})
     db.commit()
     db.refresh(row)
     return policy_dict(row, ctx)

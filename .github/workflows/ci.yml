@@ -1,0 +1,21 @@
+name: Nova CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+      - run: python -m pip install -e '.[test]'
+      - run: python -m pytest
+      - run: python scripts/audit-coupling.py
+      - run: npm --prefix apps/nova install
+      - run: npm --prefix apps/nova run build
+      - run: npm --prefix apps/nova run test:static

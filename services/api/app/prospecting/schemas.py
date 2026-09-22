@@ -77,7 +77,7 @@ class ProspectCreate(BaseModel):
 
 
 class ProspectUpdate(BaseModel):
-    assigned_user_id: int | None = None
+    assigned_subject: str | None = Field(None, max_length=255)
     status: Literal["qualified", "analysis_ready", "proposal_ready", "approved", "contacted", "won", "lost"] | None = None
     contact_name: str | None = Field(None, max_length=180)
     contact_role: str | None = Field(None, max_length=120)
@@ -184,7 +184,7 @@ class ProposalItem(BaseModel):
     email_subject: str
     email_body: str
     review: dict[str, Any]
-    approved_by_user_id: int | None
+    approved_by_subject: str | None
     approved_at: datetime | None
     share_expires_at: datetime | None
     delivery_status: str
@@ -206,9 +206,9 @@ class ProspectPromoteRequest(BaseModel):
 
 class ProspectPromoteResult(BaseModel):
     prospect_id: str
-    customer_id: int
-    lead_id: int
-    case_id: int
+    customer_id: str
+    lead_id: str
+    case_id: str
     already_promoted: bool = False
     evidence_analysis_id: str | None = None
     crm_lead_path: str
@@ -292,7 +292,7 @@ class ProspectingPolicyUpdate(BaseModel):
 
 
 class ProspectingPolicyItem(ProspectingPolicyUpdate):
-    tenant_id: int
+    tenant_id: str
     real_email_enabled: bool
     scheduler_enabled: bool
     updated_at: datetime | None

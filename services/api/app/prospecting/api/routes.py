@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.user import User
 from app.prospecting.models import WebsiteAnalysis, WebsiteProposal
 from app.prospecting.presentation import render_meeting_presentation_html
 from app.prospecting.schemas import (
@@ -66,30 +65,19 @@ from app.prospecting.service import (
     update_proposal,
     update_prospect,
 )
-from app.sales_desk.service import get_current_user_from_token, oauth2_scheme
-from app.tenancy.service import TenantContext, default_tenant_context, resolve_tenant_context
+from app.auth import PlatformPrincipal, get_platform_principal, get_tenant_context
+from app.tenancy.service import TenantContext
 
 router = APIRouter(prefix="/prospecting", tags=["website-prospecting"])
 public_router = APIRouter(prefix="/public/prospecting", tags=["public-website-proposals"])
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
-    return get_current_user_from_token(token, db)
-
-
 def get_prospecting_context(
-    tenant_id: Optional[int] = Query(default=None),
-    active_profile_id: Optional[int] = Query(default=None),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    tenant_id: Optional[str] = Query(default=None),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> TenantContext:
-    if tenant_id is not None:
-        return resolve_tenant_context(db, user, tenant_id, active_profile_id=active_profile_id)
-    ctx = default_tenant_context(db, user)
-    if ctx is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission for website prospecting")
-    if active_profile_id is not None:
-        return resolve_tenant_context(db, user, ctx.tenant_id, active_profile_id=active_profile_id)
+    if tenant_id is not None and tenant_id != ctx.tenant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     return ctx
 
 
@@ -134,10 +122,10 @@ def patch_prospecting_policy(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> ProspectingPolicyItem:
     try:
-        return ProspectingPolicyItem(**update_policy(db, ctx, user, payload, request_id=_request_id(request)))
+        return ProspectingPolicyItem(**update_policy(db, ctx, principal, payload, request_id=_request_id(request)))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
@@ -153,10 +141,10 @@ def post_campaign(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> CampaignItem:
     try:
-        return CampaignItem(**create_campaign(db, ctx, user, payload, request_id=_request_id(request)))
+        return CampaignItem(**create_campaign(db, ctx, principal, payload, request_id=_request_id(request)))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
@@ -168,10 +156,10 @@ def post_discover(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> dict:
     try:
-        return discover_for_campaign(db, ctx, user, campaign_id, payload.query, payload.region, payload.limit, request_id=_request_id(request))
+        return discover_for_campaign(db, ctx, principal, campaign_id, payload.query, payload.region, payload.limit, request_id=_request_id(request))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
@@ -193,10 +181,10 @@ def post_prospect(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> ProspectItem:
     try:
-        return ProspectItem(**create_prospect(db, ctx, user, payload, request_id=_request_id(request)))
+        return ProspectItem(**create_prospect(db, ctx, principal, payload, request_id=_request_id(request)))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
@@ -207,11 +195,11 @@ def post_prospects_bulk_csv(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> ProspectBulkCsvResult:
     """N1-3: CSV paste intake (≤50 rows). Skips duplicates; never applies contact email from CSV."""
     try:
-        return ProspectBulkCsvResult(**bulk_create_prospects_from_csv(db, ctx, user, payload, request_id=_request_id(request)))
+        return ProspectBulkCsvResult(**bulk_create_prospects_from_csv(db, ctx, principal, payload, request_id=_request_id(request)))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
@@ -231,12 +219,12 @@ def post_promote_prospect(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> ProspectPromoteResult:
     """N1-1: hand off Nova prospect → CRM customer + lead + case (no outbound)."""
     try:
         return ProspectPromoteResult(
-            **promote_prospect_to_crm(db, ctx, user, prospect_id, payload, request_id=_request_id(request))
+            **promote_prospect_to_crm(db, ctx, principal, prospect_id, payload, request_id=_request_id(request))
         )
     except ProspectingError as exc:
         raise _http_error(exc) from exc
@@ -249,10 +237,10 @@ def patch_prospect(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> ProspectItem:
     try:
-        return ProspectItem(**update_prospect(db, ctx, user, prospect_id, payload, request_id=_request_id(request)))
+        return ProspectItem(**update_prospect(db, ctx, principal, prospect_id, payload, request_id=_request_id(request)))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
@@ -264,10 +252,10 @@ def post_analysis(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> AnalysisItem:
     try:
-        return AnalysisItem(**run_analysis(db, ctx, user, prospect_id, payload, request_id=_request_id(request)))
+        return AnalysisItem(**run_analysis(db, ctx, principal, prospect_id, payload, request_id=_request_id(request)))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
@@ -289,10 +277,10 @@ def post_proposal(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> ProposalItem:
     try:
-        return ProposalItem(**generate_proposal(db, ctx, user, prospect_id, payload.analysis_id, request_id=_request_id(request)))
+        return ProposalItem(**generate_proposal(db, ctx, principal, prospect_id, payload.analysis_id, request_id=_request_id(request)))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
@@ -354,10 +342,10 @@ def patch_proposal(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> ProposalItem:
     try:
-        return ProposalItem(**update_proposal(db, ctx, user, proposal_id, payload, request_id=_request_id(request)))
+        return ProposalItem(**update_proposal(db, ctx, principal, proposal_id, payload, request_id=_request_id(request)))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
@@ -369,10 +357,10 @@ def post_approve(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> ProposalItem:
     try:
-        return ProposalItem(**approve_proposal(db, ctx, user, proposal_id, payload, request_id=_request_id(request)))
+        return ProposalItem(**approve_proposal(db, ctx, principal, proposal_id, payload, request_id=_request_id(request)))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
@@ -384,10 +372,10 @@ def post_share(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> ShareCreated:
     try:
-        return ShareCreated(**create_share(db, ctx, user, proposal_id, payload.expires_in_days, request_id=_request_id(request)))
+        return ShareCreated(**create_share(db, ctx, principal, proposal_id, payload.expires_in_days, request_id=_request_id(request)))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
@@ -399,10 +387,10 @@ def post_deliver(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> DeliveryResult:
     try:
-        return DeliveryResult(**deliver_proposal(db, ctx, user, proposal_id, payload, request_id=_request_id(request)))
+        return DeliveryResult(**deliver_proposal(db, ctx, principal, proposal_id, payload, request_id=_request_id(request)))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
@@ -413,10 +401,10 @@ def post_suppression(
     request: Request,
     db: Session = Depends(get_db),
     ctx: TenantContext = Depends(get_prospecting_context),
-    user: User = Depends(get_current_user),
+    principal: PlatformPrincipal = Depends(get_platform_principal),
 ) -> dict:
     try:
-        return add_suppression(db, ctx, user, payload, request_id=_request_id(request))
+        return add_suppression(db, ctx, principal, payload, request_id=_request_id(request))
     except ProspectingError as exc:
         raise _http_error(exc) from exc
 
