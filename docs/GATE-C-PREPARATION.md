@@ -1,8 +1,8 @@
 # Nova Gate C preparation
 
-**Task:** `NOVA-GATE-C-PREP-001`  
-**Status:** complete — preparation only; Gate C execution remains separately gated  
-**Authority:** operator approval, 2026-09-23: “Godkänn Gate C-förberedelse”  
+**Task:** `NOVA-GATE-C-PREP-001`
+**Status:** complete — preparation only; Gate C execution remains separately gated
+**Authority:** operator approval, 2026-09-23: “Godkänn Gate C-förberedelse”
 **Non-goals:** no production database access, no data export/import, no traffic
 cutover, no write-authority switch, and no legacy SalesOS removal.
 
