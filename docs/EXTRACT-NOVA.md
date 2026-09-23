@@ -32,3 +32,23 @@ not runtime dependencies; the retained filtered copies are historical only.
 The extraction is intentionally independent: Nova owns its six prospecting
 tables on the shared platform Postgres service during transition, receives
 platform JWTs, and reaches CRM only through a versioned HTTP API.
+
+## Gate B verification — 2026-09-23
+
+The current standalone repository was verified from a clean working tree
+(generated virtualenv, npm dependencies and build output were not committed):
+
+| Command | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest` | 4 passed |
+| `python3 scripts/audit-coupling.py` | passed |
+| `npm --prefix apps/nova run test:static` | passed |
+| `npm --prefix apps/nova run build` | passed |
+| `git diff --check` | passed |
+| `git grep` credential-pattern scan | no matches |
+
+The historical `c50b058` comparison cannot be recreated because that object
+and its selector manifest are unavailable. The approved replacement baseline,
+source SHA, filtered SHA, selector manifest and final standalone SHA above are
+the reproducible Gate B record. Gate B does not authorize any database
+migration, production cutover or legacy-code deletion.
