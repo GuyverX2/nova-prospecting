@@ -58,7 +58,20 @@ Reconciliation is deterministic, metadata-only and contained **no** row data
 in the repo; the evidence above lives only on `salesos-hel1` under
 `~/.agent-infra/gate-c-rehearsal/`.
 
-## Remaining gates (unchanged; require operator approval)
+## Production mapping progress (2026-09-24)
+
+`prod-mapping.json` currently contains the read-only Keycloak↔SalesOS correlations:
+
+* legacy tenant identifiers: **2** (each mapped to the SalesOS tenant slug as opaque id).
+* numeric user ids matched to Keycloak UUID subjects: **1**
+* explicitly-unmapped legacy users: **3**
+
+Per `ADR-0008` these 3 are **hard failures** — they are marked explicitly
+unmapped in the template and must be supplied by an operator before any Gate C
+write-authority switch. No subject was invented, and the current prod mapping
+therefore remains fail-closed partial, not production-authoritative.
+
+The remaining operators-gated steps are unchanged:
 
 1. Final operator-approved numeric-user-ID → Nova-subject mapping.
 2. Gate C **production** execution: switching write authority from SalesOS to
