@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""Controlled SalesOS -> standalone Nova row copy for a Gate C rehearsal.
+
+Contract:
+  * the source URL must be a **read-only** credential; this tool only runs
+    ``SELECT`` statements against it and never writes there.
+  * the target must already contain exactly the empty Nova-owned schema
+    (alembic head) plus ``alembic_version``; anything else aborts the run.
+  * every ownership reference is converted in memory with the reviewed
+    legacy-identifier mapping; row payloads and credentials are never written
+    to Git or disk.
+  * evidence is metadata-only: the operator reconciles the deterministic
+    target manifest against the pre-existing source manifest.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+from typing import Any, Iterator
+
+from sqlalchemy import MetaData, Table, create_engine, inspect, select
+
+from .manifest import manifest_from_database
+from .mapping import map_legacy_row
+from .reconcile import TABLES
+
+
+class ExportImportError(ValueError):
+    pass
+
+
+CHUNK_SIZE = 1000
+
+
+def _load_mapping(path: Path) -> dict[str, dict[str, str]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ExportImportError(f"cannot read mapping file {path}: {exc}") from exc
+    if set(payload) != {"tenant_ids", "user_subjects"}:
+        raise ExportImportError("mapping file must contain exactly tenant_ids and user_subjects")
+    tenant_ids = payload["tenant_ids"]
+    user_subjects = payload["user_subjects"]
+    if not isinstance(tenant_ids, dict) or not isinstance(user_subjects, dict):
+        raise ExportImportError("mapping file sections must be objects")
+    if not tenant_ids:
+        raise ExportImportError("tenant_ids must be reviewed and non-empty")
+    return {"tenant_ids": tenant_ids, "user_subjects": user_subjects}
+
+
+def export_import(
+    *,
+    source_url: str,
+    target_url: str,
+    mapping: Path,
+    output_manifest: Path,
+) -> dict[str, int]:
+    if source_url == target_url:
+        raise ExportImportError("source and target URLs must be different credentials")
+    source_engine = create_engine(source_url)
+    target_engine = create_engine(target_url)
+    counts: dict[str, int] = {}
+    try:
+        source_tables = set(inspect(source_engine).get_table_names())
+        missing = set(TABLES) - source_tables
+        if missing:
+            raise ExportImportError(
+                f"source database is missing Nova-owned tables: {', '.join(sorted(missing))}"
+            )
+        target_tables = set(inspect(target_engine).get_table_names())
+        target_extras = target_tables - set(TABLES) - {"alembic_version"}
+        if target_extras:
+            raise ExportImportError(
+                "target schema is not exactly the Nova-owned tables: "
+                + ", ".join(sorted(target_extras))
+            )
+
+        metadata = MetaData()
+        _mapping = _load_mapping(Path(mapping))
+        with (
+            source_engine.connect().execution_options(stream_results=True) as source_connection,
+            target_engine.begin() as target_connection,
+        ):
+            for name in TABLES:
+                source_table = Table(name, MetaData(), autoload_with=source_connection)
+                target_table = Table(name, MetaData(), autoload_with=target_connection)
+
+                def _batched() -> Iterator[list[dict[str, Any]]]:
+                    rows = source_connection.execute(select(source_table)).mappings()
+                    buffer: list[dict[str, Any]] = []
+                    for row in rows:
+                        converted = map_legacy_row(
+                            name,
+                            dict(row),
+                            tenant_ids=_mapping["tenant_ids"],
+                            user_subjects=_mapping["user_subjects"],
+                        )
+                        buffer.append(converted)
+                        if len(buffer) >= CHUNK_SIZE:
+                            yield buffer
+                            buffer = []
+                    if buffer:
+                        yield buffer
+
+                inserted = 0
+                for batch in _batched():
+                    target_connection.execute(target_table.insert(), batch)
+                    inserted += len(batch)
+                counts[name] = inserted
+
+        manifest = manifest_from_database(target_url)
+        _write_output_manifest(output_manifest, manifest)
+    finally:
+        source_engine.dispose()
+        target_engine.dispose()
+    return counts
+
+
+def _write_output_manifest(path: Path, manifest: dict[str, Any]) -> None:
+    if path.exists():
+        raise ExportImportError("refusing to overwrite an existing manifest")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Rehearse a controlled SalesOS -> Nova row copy")
+    parser.add_argument("--source-url", required=True, help="read-only source credential (never printed)")
+    parser.add_argument("--target-url", required=True, help="empty Nova-owned schema credential (never printed)")
+    parser.add_argument("--mapping", type=Path, required=True, help="legacy identifier mapping file")
+    parser.add_argument("--output-manifest", type=Path, required=True, help="new metadata-only target manifest")
+    args = parser.parse_args()
+    counts = export_import(
+        source_url=args.source_url,
+        target_url=args.target_url,
+        mapping=args.mapping,
+        output_manifest=args.output_manifest,
+    )
+    print(json.dumps({"result": "ok", "tables": counts}, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
