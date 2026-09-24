@@ -66,6 +66,19 @@ in the repo; the evidence above lives only on `salesos-hel1` under
 3. Gate D: production routing/cutover (`nova.salesos.se`).
 4. Gate E: SalesOS prospecting runtime retirement.
 
+## Keycloak correlation progress (2026-09-24)
+
+Read-only Keycloak↔SalesOS correlation via `keycloak-mapping.py`:
+
+* legacy tenant identifiers: **2** (each mapped to its SalesOS `tenants.slug`).
+* legacy numeric user ids matched to Keycloak UUID subjects: **1**
+* explicitly-unmapped legacy users: **3**
+
+Per `ADR-0008`, the 3 unmatched users are hard failures — they stay
+explicitly-unmapped in the template until an operator supplies the opaque
+Nova target values. Nothing is invented and the prod mapping remains
+fail-closed partial, not production-authoritative.
+
 ## Verification command performed live
 
 ```sh
