@@ -69,11 +69,12 @@ def manifest_from_database(
 
 def write_manifest(
     database_url: str,
-    output: Path,
+    output: Path | str,
     *,
     tenant_ids: Mapping[str, str] | None = None,
 ) -> None:
     """Write only count/hash metadata; output must be a new file."""
+    output = Path(output)
     if output.exists():
         raise ManifestError("refusing to overwrite an existing manifest")
     manifest = manifest_from_database(database_url, tenant_ids=tenant_ids)
