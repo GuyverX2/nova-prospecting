@@ -22,7 +22,7 @@ from typing import Any, Iterator
 from sqlalchemy import MetaData, Table, create_engine, inspect, select
 
 from .manifest import manifest_from_database
-from .mapping import map_legacy_row
+from .mapping import _SUBJECT_FIELDS, map_legacy_row
 from .reconcile import TABLES
 
 
@@ -38,15 +38,39 @@ def _load_mapping(path: Path) -> dict[str, dict[str, str]]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ExportImportError(f"cannot read mapping file {path}: {exc}") from exc
-    if set(payload) != {"tenant_ids", "user_subjects"}:
-        raise ExportImportError("mapping file must contain exactly tenant_ids and user_subjects")
+    required = {"tenant_ids", "user_subjects"}
+    allowed = required | {"subject_reattributions"}
+    if not required <= set(payload):
+        raise ExportImportError("mapping file must contain tenant_ids and user_subjects")
+    if set(payload) > allowed:
+        raise ExportImportError(
+            "mapping file may only contain tenant_ids, user_subjects"
+            " and subject_reattributions"
+        )
     tenant_ids = payload["tenant_ids"]
     user_subjects = payload["user_subjects"]
     if not isinstance(tenant_ids, dict) or not isinstance(user_subjects, dict):
         raise ExportImportError("mapping file sections must be objects")
     if not tenant_ids:
         raise ExportImportError("tenant_ids must be reviewed and non-empty")
-    return {"tenant_ids": tenant_ids, "user_subjects": user_subjects}
+    reattributions = payload.get("subject_reattributions", {})
+    if not isinstance(reattributions, dict):
+        raise ExportImportError("subject_reattributions must be an object")
+    for src, owner in reattributions.items():
+        if str(src) in user_subjects:
+            raise ExportImportError(
+                f"subject_reattribution source {src!r} must not also be in user_subjects"
+            )
+        if str(owner) not in user_subjects:
+            raise ExportImportError(
+                f"subject_reattribution target {owner!r} must be present in user_subjects"
+            )
+    reattributions = {str(k): str(v) for k, v in reattributions.items()}
+    return {
+        "tenant_ids": tenant_ids,
+        "user_subjects": user_subjects,
+        "subject_reattributions": reattributions,
+    }
 
 
 def export_import(
@@ -88,11 +112,20 @@ def export_import(
 
                 def _batched() -> Iterator[list[dict[str, Any]]]:
                     rows = source_connection.execute(select(source_table)).mappings()
+                    user_fields = [sf for (sf, _, _) in _SUBJECT_FIELDS[name]]
+                    reattrib = _mapping["subject_reattributions"]
                     buffer: list[dict[str, Any]] = []
                     for row in rows:
+                        r = dict(row)
+                        for sf in user_fields:
+                            val = r.get(sf)
+                            if val is not None:
+                                key = str(val)
+                                if key in reattrib:
+                                    r[sf] = reattrib[key]
                         converted = map_legacy_row(
                             name,
-                            dict(row),
+                            r,
                             tenant_ids=_mapping["tenant_ids"],
                             user_subjects=_mapping["user_subjects"],
                         )

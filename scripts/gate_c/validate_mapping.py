@@ -17,9 +17,30 @@ def main() -> int:
         document = json.loads(args.mapping.read_text(encoding="utf-8"))
         tenants = _validated_mapping(document.get("tenant_ids", {}), name="tenant_ids")
         subjects = _validated_mapping(document.get("user_subjects", {}), name="user_subjects")
+        reattributions = document.get("subject_reattributions", {})
+        if not isinstance(reattributions, dict):
+            raise MappingError("subject_reattributions must be an object")
+        for src, owner in reattributions.items():
+            if str(src) in subjects:
+                raise MappingError(
+                    f"subject_reattribution source {src!r} must not also be in user_subjects"
+                )
+            if str(owner) not in subjects:
+                raise MappingError(
+                    f"subject_reattribution target {owner!r} must be present in user_subjects"
+                )
     except (OSError, json.JSONDecodeError, MappingError) as exc:
         parser.error(str(exc))
-    print(json.dumps({"result": "ok", "tenant_mappings": len(tenants), "subject_mappings": len(subjects)}))
+    print(
+        json.dumps(
+            {
+                "result": "ok",
+                "tenant_mappings": len(tenants),
+                "subject_mappings": len(subjects),
+                "subject_reattributions": len(reattributions),
+            }
+        )
+    )
     return 0
 
 

@@ -22,4 +22,4 @@ include = ["app*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["services/api"]
-testpaths = ["tests/test_standalone_backend.py", "tests/test_coupling_audit.py", "tests/test_gate_c_preparation.py"]
+testpaths = ["tests/test_standalone_backend.py", "tests/test_coupling_audit.py", "tests/test_gate_c_preparation.py", "tests/test_gate_c_export_import.py"]
