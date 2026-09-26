@@ -14,9 +14,12 @@ From repo root with API venv active:
 
 ```bash
 source .venv/bin/activate
-PYTHONPATH=tools/crawl-spike:services/api pytest tests/test_prospecting_crawl_spike.py -q
-python -m crawl_spike.harness
+pip install -r tools/crawl-spike/requirements.txt   # PyYAML; live arms are optional
+PYTHONPATH=tools/crawl-spike:services/api python -m crawl_spike.harness
 ```
+
+Cases come from `docs/architecture-program/wave-0-3/fixtures/crawl-cases.yaml`,
+the same fixture the decision record cites.
 
 ## Optional live libraries
 

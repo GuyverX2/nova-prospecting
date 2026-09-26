@@ -4,18 +4,107 @@ on:
   push:
   pull_request:
 
+# A newer push to the same ref makes the previous run irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "24"
+
 jobs:
-  verify:
+  backend:
+    name: Backend (lint, types, tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install -e '.[dev]'
+      - name: Lint
+        run: python -m ruff check .
+      - name: Type check
+        run: python -m mypy services/api/app
+      - name: Tests
+        run: python -m pytest -q
+      - name: Repository boundary audit
+        run: python scripts/audit-coupling.py
+
+  migrations:
+    name: Migrations (clean database and upgrade path)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install -e '.[dev]'
+      - name: Upgrade a clean database to head
+        env:
+          NOVA_DATABASE_URL: sqlite:///./ci-clean.db
+        run: python -m alembic -c alembic.ini upgrade head
+      - name: Downgrade to base and upgrade again
+        env:
+          NOVA_DATABASE_URL: sqlite:///./ci-clean.db
+        run: |
+          python -m alembic -c alembic.ini downgrade base
+          python -m alembic -c alembic.ini upgrade head
+      - name: Migrated schema must match the models
+        env:
+          NOVA_DATABASE_URL: sqlite:///./ci-clean.db
+        run: python scripts/check-migration-parity.py
+
+  frontend:
+    name: Console (build and guardrails)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: "24" }
-      - run: python -m pip install -e '.[test]'
-      - run: python -m pytest
-      - run: python scripts/audit-coupling.py
-      - run: npm --prefix apps/nova install
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/nova/package-lock.json
+      - run: npm --prefix apps/nova ci
       - run: npm --prefix apps/nova run build
       - run: npm --prefix apps/nova run test:static
+
+  container:
+    name: Container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: nova-prospecting:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: The image must come up healthy
+        run: |
+          docker run -d --name nova-ci -p 8000:8000 \
+            -e NOVA_ENV=test \
+            -e NOVA_DATABASE_URL=sqlite:////tmp/nova-ci.db \
+            nova-prospecting:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health/ready > /dev/null; then
+              echo "ready after ${attempt}s"
+              curl -fsS http://127.0.0.1:8000/health/live
+              docker rm -f nova-ci
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "container never became ready"
+          docker logs nova-ci
+          docker rm -f nova-ci
+          exit 1
