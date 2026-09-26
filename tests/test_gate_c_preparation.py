@@ -1,20 +1,25 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
-from sqlalchemy import inspect
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 
-from scripts.gate_c.reconcile import TABLES, ReconciliationError, manifest_for_records, reconcile
-from scripts.gate_c.mapping import MappingError, map_legacy_row
-from scripts.gate_c.manifest import ManifestError, manifest_from_database, write_manifest
 from app.db.session import Base
 from app.prospecting import models  # noqa: F401 -- registers the six target tables
+from scripts.gate_c.manifest import ManifestError, manifest_from_database, write_manifest
+from scripts.gate_c.mapping import MappingError, map_legacy_row
+from scripts.gate_c.reconcile import (
+    NOVA_OWNED_TABLES,
+    TABLES,
+    ReconciliationError,
+    manifest_for_records,
+    reconcile,
+)
 
 
 def _records(tenant: str = "tenant-1"):
@@ -26,7 +31,7 @@ def _records(tenant: str = "tenant-1"):
 
 def test_manifest_reconciliation_requires_ids_and_tenant_ownership_to_match():
     source = manifest_for_records(_records())
-    assert reconcile(source, manifest_for_records(_records())) == {table: 1 for table in TABLES}
+    assert reconcile(source, manifest_for_records(_records())) == dict.fromkeys(TABLES, 1)
 
     changed_owner = _records("tenant-2")
     with pytest.raises(ReconciliationError, match="tenant_ownership_sha256 differs"):
@@ -100,11 +105,14 @@ def test_initial_migration_creates_only_nova_owned_tables(tmp_path: Path):
     engine = create_engine(f"sqlite:///{database}")
     try:
         names = set(inspect(engine).get_table_names())
+        columns = {column["name"] for column in inspect(engine).get_columns("website_proposals")}
     finally:
         engine.dispose()
-    assert names == {*TABLES, "alembic_version"}
+    # Nova owns the six reconciled tables plus its audit trail, and nothing else.
+    assert names == {*NOVA_OWNED_TABLES, "alembic_version"}
     assert "tenants" not in names
     assert "users" not in names
+    assert "delivery_processed_at" in columns
 
     subprocess.run(
         [sys.executable, "-m", "alembic", "-c", "alembic.ini", "downgrade", "base"],
@@ -114,6 +122,6 @@ def test_initial_migration_creates_only_nova_owned_tables(tmp_path: Path):
     )
     engine = create_engine(f"sqlite:///{database}")
     try:
-        assert not (set(TABLES) & set(inspect(engine).get_table_names()))
+        assert not (set(NOVA_OWNED_TABLES) & set(inspect(engine).get_table_names()))
     finally:
         engine.dispose()

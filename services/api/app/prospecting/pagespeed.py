@@ -1,15 +1,20 @@
 """Optional Google PageSpeed Insights enrichment for browser-based metrics."""
 from __future__ import annotations
 
-import json
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
 from app.core.config import settings
+from app.integrations.http import (
+    IntegrationRejected,
+    IntegrationUnavailable,
+    RetryPolicy,
+    request_json,
+)
 from app.prospecting.analyzer import normalize_public_url
 
 PAGESPEED_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
+MAX_PAGESPEED_BYTES = 6_000_000
+USER_AGENT = "Nova-WebAudit/1.0"
 
 
 class PageSpeedError(Exception):
@@ -33,20 +38,19 @@ def run_pagespeed(url: str) -> dict | None:
         ("category", "BEST_PRACTICES"),
         ("key", settings.PAGESPEED_API_KEY),
     ]
-    request = Request(f"{PAGESPEED_ENDPOINT}?{urlencode(params)}", headers={"Accept": "application/json", "User-Agent": "SalesOS-WebAudit/1.0"})
     try:
-        with urlopen(request, timeout=25) as response:
-            raw = response.read(6_000_001)
-    except HTTPError as exc:
-        raise PageSpeedError(f"PageSpeed returned HTTP {exc.code}") from exc
-    except (URLError, TimeoutError, OSError) as exc:
-        raise PageSpeedError("PageSpeed provider could not be reached") from exc
-    if len(raw) > 6_000_000:
-        raise PageSpeedError("PageSpeed response exceeded the size limit")
-    try:
-        payload = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError) as exc:
-        raise PageSpeedError("PageSpeed returned an invalid response") from exc
+        payload = request_json(
+            f"{PAGESPEED_ENDPOINT}?{urlencode(params)}",
+            headers={"User-Agent": USER_AGENT},
+            timeout=settings.PAGESPEED_TIMEOUT_SECONDS,
+            max_bytes=MAX_PAGESPEED_BYTES,
+            retry=RetryPolicy(attempts=2),
+            provider="PageSpeed",
+        )
+    except (IntegrationRejected, IntegrationUnavailable) as exc:
+        # Enrichment is optional: the caller records the warning and keeps the
+        # evidence-backed HTML analysis it already has.
+        raise PageSpeedError(str(exc)) from exc
     lighthouse = payload.get("lighthouseResult") or {}
     categories = lighthouse.get("categories") or {}
     audits = lighthouse.get("audits") or {}

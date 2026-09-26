@@ -74,9 +74,8 @@ class _PageParser(HTMLParser):
         elif tag == "meta":
             name = (attrs.get("name") or "").lower()
             prop = (attrs.get("property") or "").lower()
-            if name == "description" or prop == "og:description":
-                if not self.page.description:
-                    self.page.description = (attrs.get("content") or "").strip()
+            if (name == "description" or prop == "og:description") and not self.page.description:
+                self.page.description = (attrs.get("content") or "").strip()
             if name == "viewport":
                 self.page.viewport = True
         elif tag == "link":
@@ -174,7 +173,7 @@ class _SafeRedirectHandler(HTTPRedirectHandler):
         super().__init__()
         self.redirect_count = 0
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
         self.redirect_count += 1
         if self.redirect_count > MAX_REDIRECTS:
             raise WebsiteAuditError("TOO_MANY_REDIRECTS", "The website exceeded the redirect limit", 400)
@@ -187,7 +186,9 @@ def _bounded_fetch(url: str, *, accept: str, max_bytes: int) -> tuple[bytes, str
     safe_url = normalize_public_url(url)
     _assert_public_host(safe_url)
     opener = build_opener(_SafeRedirectHandler())
-    request = Request(safe_url, headers={"User-Agent": USER_AGENT, "Accept": accept})
+    # S310 on the next two lines: normalize_public_url and _assert_public_host
+    # have already proven this URL is a public http(s) endpoint.
+    request = Request(safe_url, headers={"User-Agent": USER_AGENT, "Accept": accept})  # noqa: S310
     started = time.monotonic()
     try:
         with opener.open(request, timeout=FETCH_TIMEOUT_SECONDS) as response:

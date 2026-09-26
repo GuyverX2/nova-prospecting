@@ -14,26 +14,26 @@ sys.path.insert(0, str(API_ROOT))
 from app.core.config import settings  # noqa: E402
 
 
-def verify_login(address: str, password: str) -> None:
-    with smtplib.SMTP(settings.PROSPECTING_SMTP_HOST, settings.PROSPECTING_SMTP_PORT, timeout=20) as client:
-        if settings.PROSPECTING_SMTP_STARTTLS:
+def verify_login(mailbox) -> None:
+    with smtplib.SMTP(mailbox.host, mailbox.port, timeout=20) as client:
+        if mailbox.starttls:
             client.starttls()
-        client.login(address, password)
+        client.login(mailbox.username, mailbox.password)
 
 
-def send_test(address: str, password: str, recipient: str) -> None:
+def send_test(mailbox, recipient: str) -> None:
     message = EmailMessage()
-    message["From"] = address
+    message["From"] = mailbox.from_address
     message["To"] = recipient
     message["Subject"] = "SalesOS Nova SMTP smoke test"
     message.set_content(
         "This is an operator smoke test from scripts/deploy/smoke-nova-smtp.py. "
         "Safe to delete."
     )
-    with smtplib.SMTP(settings.PROSPECTING_SMTP_HOST, settings.PROSPECTING_SMTP_PORT, timeout=20) as client:
-        if settings.PROSPECTING_SMTP_STARTTLS:
+    with smtplib.SMTP(mailbox.host, mailbox.port, timeout=20) as client:
+        if mailbox.starttls:
             client.starttls()
-        client.login(address, password)
+        client.login(mailbox.username, mailbox.password)
         client.send_message(message)
 
 
@@ -53,10 +53,11 @@ def main() -> int:
     if not settings.prospecting_email_configured():
         raise SystemExit("SMTP host and at least one mailbox with password are required")
 
-    mailboxes = settings.prospecting_smtp_mailboxes()
-    for address, password in mailboxes:
+    mailboxes = settings.SMTP_MAILBOXES
+    for mailbox in mailboxes:
+        address = mailbox.from_address
         try:
-            verify_login(address, password)
+            verify_login(mailbox)
         except smtplib.SMTPAuthenticationError as exc:
             hint = ""
             if "gmail" not in (settings.PROSPECTING_SMTP_HOST or "").lower():
@@ -82,9 +83,8 @@ def main() -> int:
     )
 
     if args.send_test_to:
-        first_address, first_password = mailboxes[0]
-        send_test(first_address, first_password, args.send_test_to.strip())
-        print(f"Sent test message from {first_address} to {args.send_test_to.strip()}")
+        send_test(mailboxes[0], args.send_test_to.strip())
+        print(f"Sent test message from {mailboxes[0].from_address} to {args.send_test_to.strip()}")
 
     return 0
 

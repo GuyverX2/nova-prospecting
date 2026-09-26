@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from logging.config import fileConfig
 import os
+from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.db.session import Base
 from app.prospecting import models  # noqa: F401 -- registers Nova-owned tables
-
+from app.tenancy import service  # noqa: F401 -- registers the audit table
 
 config = context.config
 if config.config_file_name is not None:
@@ -18,7 +18,13 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    return os.environ.get("NOVA_DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+    """The application and the migrations must never disagree about the target."""
+    url = os.environ.get("NOVA_DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+    if not url:
+        raise RuntimeError(
+            "NOVA_DATABASE_URL is required to run migrations (or set sqlalchemy.url in alembic.ini)"
+        )
+    return url
 
 
 def run_migrations_offline() -> None:

@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-
+#: The six reconciled data tables. Every row in these is copied and verified.
 TABLES = (
     "prospecting_campaigns",
     "website_prospects",
@@ -23,6 +23,13 @@ TABLES = (
     "prospecting_policies",
     "prospect_suppressions",
 )
+
+#: Nova-owned but never copied: the audit trail belongs to the environment that
+#: produced it, so an import target must contain it and it must be empty.
+AUDIT_TABLE = "audit_events"
+
+#: Every table the Nova migration chain owns.
+NOVA_OWNED_TABLES = (*TABLES, AUDIT_TABLE)
 
 
 class ReconciliationError(ValueError):

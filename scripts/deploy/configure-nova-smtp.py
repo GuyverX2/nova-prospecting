@@ -15,8 +15,10 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ENV = REPO_ROOT / "services" / "api" / ".env"
-ENV_EXAMPLE = REPO_ROOT / "services" / "api" / ".env.example"
+# The service reads one environment file at the repository root (or whatever the
+# host passes with --env-file); services/api/.env was never read by anything.
+DEFAULT_ENV = REPO_ROOT / ".env"
+ENV_EXAMPLE = REPO_ROOT / ".env.example"
 
 # H8c dual-valid From allowlist + Gmail SMTP relay for Google Workspace mailboxes.
 NOVA_GMAIL_KEYS: tuple[tuple[str, str], ...] = (
@@ -32,10 +34,22 @@ NOVA_GMAIL_KEYS: tuple[tuple[str, str], ...] = (
     ("PROSPECTING_SMTP_MAILBOX_2_ADDRESS", "micha@triplusmedia.com"),
 )
 
-MAILBOXES: tuple[tuple[str, str], ...] = (
+#: Documented default deployment (dual_valid NOVA-SMTP-GENERIC-HOST-20260817).
+#: Override with --mailbox for any other host.
+DEFAULT_MAILBOXES: tuple[tuple[str, str], ...] = (
     ("martin@triplusmedia.com", "PROSPECTING_SMTP_MAILBOX_1_PASSWORD"),
     ("micha@triplusmedia.com", "PROSPECTING_SMTP_MAILBOX_2_PASSWORD"),
 )
+
+
+def resolve_mailboxes(addresses: list[str] | None) -> tuple[tuple[str, str], ...]:
+    """Pair each sending address with the env var that holds its password."""
+    if not addresses:
+        return DEFAULT_MAILBOXES
+    return tuple(
+        (address.strip().lower(), f"PROSPECTING_SMTP_MAILBOX_{index}_PASSWORD")
+        for index, address in enumerate(addresses, start=1)
+    )
 
 
 def upsert_env_keys(path: Path, updates: dict[str, str]) -> None:
@@ -98,9 +112,18 @@ def main() -> int:
         help=f"Target env file (default: {DEFAULT_ENV.relative_to(REPO_ROOT)})",
     )
     parser.add_argument(
+        "--mailbox",
+        action="append",
+        metavar="ADDRESS",
+        help=(
+            "Sending mailbox to configure; repeat for more. "
+            f"Default: {', '.join(address for address, _ in DEFAULT_MAILBOXES)}"
+        ),
+    )
+    parser.add_argument(
         "--init-from-example",
         action="store_true",
-        help="Copy services/api/.env.example when the target file is missing",
+        help="Copy .env.example when the target file is missing",
     )
     args = parser.parse_args()
     env_file: Path = args.env_file
@@ -109,7 +132,7 @@ def main() -> int:
 
     print("Nova SMTP configure — Google Workspace")
     print("  Host:     smtp.gmail.com:587 STARTTLS")
-    print("  From:     martin@triplusmedia.com, micha@triplusmedia.com")
+    print(f"  From:     {', '.join(address for address, _ in resolve_mailboxes(args.mailbox))}")
     print("  Note:     triplusmedia.com is Google mail (not Loopia/mailcluster)")
     print(f"  Env file: {env_file}")
 
@@ -123,8 +146,10 @@ def main() -> int:
         else:
             raise SystemExit(f"Environment file not found: {env_file}")
 
-    updates = dict(NOVA_GMAIL_KEYS)
-    for address, env_var in MAILBOXES:
+    mailboxes = resolve_mailboxes(args.mailbox)
+    updates = {key: value for key, value in NOVA_GMAIL_KEYS if not key.startswith("PROSPECTING_SMTP_MAILBOX_")}
+    for index, (address, env_var) in enumerate(mailboxes, start=1):
+        updates[f"PROSPECTING_SMTP_MAILBOX_{index}_ADDRESS"] = address
         updates[env_var] = prompt_google_secret(address, env_var=env_var)
 
     upsert_env_keys(env_file, updates)

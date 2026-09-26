@@ -34,10 +34,11 @@ TERMS OF SERVICE
 """
 from __future__ import annotations
 
+import json
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
 from urllib.robotparser import RobotFileParser
@@ -240,7 +241,7 @@ def robots_verdict(url: str, *, user_agent: str = USER_AGENT) -> RobotsVerdict:
     delay: float | None = None
     try:
         raw_delay = parser.crawl_delay(user_agent)
-    except Exception:  # noqa: BLE001 - an unparseable delay must not block the audit
+    except Exception:
         raw_delay = None
     if raw_delay is not None:
         try:
@@ -326,12 +327,12 @@ class _FactParser(HTMLParser):
 
 
 def _json_ld_name(blocks: list[str]) -> str | None:
-    import json
-
     for block in blocks:
         try:
             payload = json.loads(block.strip())
-        except Exception:  # noqa: BLE001 - malformed JSON-LD is common; skip it
+        except (TypeError, ValueError):
+            # Malformed JSON-LD on a third-party page is expected, not an error:
+            # skip this block and keep extracting from the rest of the page.
             continue
         candidates = payload if isinstance(payload, list) else [payload]
         for entry in candidates:
@@ -478,7 +479,7 @@ def extract_public_page(
         level=EXTRACTION_LEVEL,
         requested_url=safe_url,
         final_url=final_url,
-        fetched_at=datetime.now(timezone.utc).isoformat(),
+        fetched_at=datetime.now(UTC).isoformat(),
         content_sha256=content_sha,
         facts=tuple(facts),
         politeness={
