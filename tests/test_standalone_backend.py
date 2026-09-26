@@ -7,15 +7,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.auth import create_access_token
+from app.auth import PlatformPrincipal, create_access_token
 from app.core.config import settings
 from app.crm.client import SalesOSCrmClient
 from app.db.session import Base, get_db
 from app.main import app
+from app.prospecting.models import WebsiteProspect
 from app.prospecting.schemas import ProspectCreate, ProspectPromoteRequest
 from app.prospecting.service import ProspectingError, create_prospect, promote_prospect_to_crm
-from app.prospecting.models import WebsiteProspect
-from app.auth import PlatformPrincipal
 from app.tenancy.service import TenantContext
 
 
@@ -50,7 +49,7 @@ def test_unavailable_crm_leaves_prospect_unchanged(monkeypatch):
 
 
 def test_jwt_tenant_claim_is_required_and_cannot_be_overridden():
-    with workspace() as (db, ctx, principal):
+    with workspace() as (db, _ctx, principal):
         def override_db():
             yield db
 
@@ -82,7 +81,7 @@ def test_crm_promotion_uses_a_stable_idempotency_key(monkeypatch):
         requests.append(request)
         return Response()
 
-    monkeypatch.setattr("app.crm.client.urlopen", fake_urlopen)
+    monkeypatch.setattr("app.integrations.http.urlopen", fake_urlopen)
     crm = SalesOSCrmClient("https://crm.example")
     for _ in range(2):
         result = crm.promote_prospect(bearer_token="caller-token", tenant_id="tenant-7", prospect_id="pr_123", payload={"company_name": "Acme"})

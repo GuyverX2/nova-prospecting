@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 
 from app.db.session import Base
 from app.prospecting import models  # noqa: F401 -- registers the six target tables
@@ -70,8 +70,6 @@ def test_export_import_rehearsal_is_fail_closed_and_tenant_preserving(
     manifest = _read_manifest(output)
     assert manifest["tables"]["prospecting_campaigns"]["count"] == 1
 
-    from scripts.gate_c.manifest import manifest_from_database
-    from scripts.gate_c.reconcile import reconcile
 
     source = manifest_from_database(source_db, tenant_ids={"7": "tenant-formkok"})
     assert reconcile(source, manifest) == counts

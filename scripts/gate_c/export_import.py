@@ -16,14 +16,16 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
-from sqlalchemy import MetaData, Table, create_engine, inspect, select
+from sqlalchemy import MetaData, Table, create_engine, func, inspect, select, table
+from sqlalchemy.engine import Connection
 
 from .manifest import manifest_from_database
 from .mapping import _SUBJECT_FIELDS, map_legacy_row
-from .reconcile import TABLES
+from .reconcile import AUDIT_TABLE, NOVA_OWNED_TABLES, TABLES
 
 
 class ExportImportError(ValueError):
@@ -73,6 +75,37 @@ def _load_mapping(path: Path) -> dict[str, dict[str, str]]:
     }
 
 
+def _converted_batches(
+    connection: Connection,
+    source_table: Table,
+    name: str,
+    mapping: dict[str, dict[str, str]],
+) -> Iterator[list[dict[str, Any]]]:
+    """Stream one source table, converting ownership references in memory."""
+    user_fields = [source_field for (source_field, _, _) in _SUBJECT_FIELDS[name]]
+    reattributions = mapping["subject_reattributions"]
+    buffer: list[dict[str, Any]] = []
+    for row in connection.execute(select(source_table)).mappings():
+        record = dict(row)
+        for source_field in user_fields:
+            value = record.get(source_field)
+            if value is not None and str(value) in reattributions:
+                record[source_field] = reattributions[str(value)]
+        buffer.append(
+            map_legacy_row(
+                name,
+                record,
+                tenant_ids=mapping["tenant_ids"],
+                user_subjects=mapping["user_subjects"],
+            )
+        )
+        if len(buffer) >= CHUNK_SIZE:
+            yield buffer
+            buffer = []
+    if buffer:
+        yield buffer
+
+
 def export_import(
     *,
     source_url: str,
@@ -93,14 +126,27 @@ def export_import(
                 f"source database is missing Nova-owned tables: {', '.join(sorted(missing))}"
             )
         target_tables = set(inspect(target_engine).get_table_names())
-        target_extras = target_tables - set(TABLES) - {"alembic_version"}
+        target_extras = target_tables - set(NOVA_OWNED_TABLES) - {"alembic_version"}
         if target_extras:
             raise ExportImportError(
                 "target schema is not exactly the Nova-owned tables: "
                 + ", ".join(sorted(target_extras))
             )
+        target_missing = set(TABLES) - target_tables
+        if target_missing:
+            raise ExportImportError(
+                "target database is missing Nova-owned tables: " + ", ".join(sorted(target_missing))
+            )
+        if AUDIT_TABLE in target_tables:
+            # A target that already holds audit rows is not a fresh import
+            # target; refuse rather than interleaving two environments' trails.
+            with target_engine.connect() as probe:
+                audit_rows = probe.execute(
+                    select(func.count()).select_from(table(AUDIT_TABLE))
+                ).scalar_one()
+            if audit_rows:
+                raise ExportImportError("target audit_events must be empty before an import")
 
-        metadata = MetaData()
         _mapping = _load_mapping(Path(mapping))
         with (
             source_engine.connect().execution_options(stream_results=True) as source_connection,
@@ -109,35 +155,8 @@ def export_import(
             for name in TABLES:
                 source_table = Table(name, MetaData(), autoload_with=source_connection)
                 target_table = Table(name, MetaData(), autoload_with=target_connection)
-
-                def _batched() -> Iterator[list[dict[str, Any]]]:
-                    rows = source_connection.execute(select(source_table)).mappings()
-                    user_fields = [sf for (sf, _, _) in _SUBJECT_FIELDS[name]]
-                    reattrib = _mapping["subject_reattributions"]
-                    buffer: list[dict[str, Any]] = []
-                    for row in rows:
-                        r = dict(row)
-                        for sf in user_fields:
-                            val = r.get(sf)
-                            if val is not None:
-                                key = str(val)
-                                if key in reattrib:
-                                    r[sf] = reattrib[key]
-                        converted = map_legacy_row(
-                            name,
-                            r,
-                            tenant_ids=_mapping["tenant_ids"],
-                            user_subjects=_mapping["user_subjects"],
-                        )
-                        buffer.append(converted)
-                        if len(buffer) >= CHUNK_SIZE:
-                            yield buffer
-                            buffer = []
-                    if buffer:
-                        yield buffer
-
                 inserted = 0
-                for batch in _batched():
+                for batch in _converted_batches(source_connection, source_table, name, _mapping):
                     target_connection.execute(target_table.insert(), batch)
                     inserted += len(batch)
                 counts[name] = inserted

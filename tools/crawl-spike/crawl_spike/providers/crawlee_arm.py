@@ -6,7 +6,6 @@ import re
 from dataclasses import dataclass, field
 
 from app.prospecting.agentic_extract import extract_facts
-
 from crawl_spike.js_sim import simulate_js_render
 from crawl_spike.providers.keep_nova import NovaArmResult
 

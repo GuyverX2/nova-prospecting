@@ -3,15 +3,18 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 import smtplib
 import uuid
 from dataclasses import dataclass
 from email.message import EmailMessage
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 from app.core.config import settings
+from app.integrations.http import (
+    IntegrationRejected,
+    IntegrationUnavailable,
+    RetryPolicy,
+    request_json,
+)
 
 RESEND_ENDPOINT = "https://api.resend.com/emails"
 
@@ -32,7 +35,7 @@ class DeliveryReceipt:
 
 
 def opt_out_token(tenant_id: str, prospect_id: str, email: str) -> str:
-    message = f"{tenant_id}:{prospect_id}:{email.strip().lower()}".encode("utf-8")
+    message = f"{tenant_id}:{prospect_id}:{email.strip().lower()}".encode()
     return hmac.new(settings.JWT_SECRET.encode("utf-8"), message, hashlib.sha256).hexdigest()
 
 
@@ -85,26 +88,29 @@ def deliver_email(
     }
     request_headers = {
         "Authorization": f"Bearer {settings.PROSPECTING_EMAIL_API_KEY}",
-        "Content-Type": "application/json",
-        "User-Agent": "SalesOS-Prospecting/1.0",
+        "User-Agent": "Nova-Prospecting/1.0",
     }
     if idempotency_key:
         # Resend retains idempotency keys, so a lost response can be retried
         # without creating a second external message for the same proposal.
         request_headers["Idempotency-Key"] = idempotency_key[:256]
-    request = Request(
-        RESEND_ENDPOINT,
-        data=json.dumps(payload).encode("utf-8"),
-        method="POST",
-        headers=request_headers,
-    )
     try:
-        with urlopen(request, timeout=12) as response:
-            response_payload = json.loads(response.read(256_000).decode("utf-8"))
-    except HTTPError as exc:
-        raise ProspectingDeliveryError("EMAIL_PROVIDER_REJECTED", f"Email provider returned HTTP {exc.code}", 502) from exc
-    except (URLError, TimeoutError, OSError, ValueError) as exc:
-        raise ProspectingDeliveryError("EMAIL_PROVIDER_UNAVAILABLE", "Email provider could not be reached", 502) from exc
+        response_payload = request_json(
+            RESEND_ENDPOINT,
+            method="POST",
+            json_body=payload,
+            headers=request_headers,
+            timeout=12,
+            max_bytes=256_000,
+            retry=RetryPolicy(attempts=2) if idempotency_key else None,
+            provider="Email provider",
+        )
+    except IntegrationRejected as exc:
+        raise ProspectingDeliveryError("EMAIL_PROVIDER_REJECTED", str(exc), 502) from exc
+    except IntegrationUnavailable as exc:
+        raise ProspectingDeliveryError(
+            "EMAIL_PROVIDER_UNAVAILABLE", "Email provider could not be reached", 502
+        ) from exc
     delivery_id = str(response_payload.get("id") or "").strip()
     if not delivery_id:
         raise ProspectingDeliveryError("EMAIL_PROVIDER_INVALID_RESPONSE", "Email provider response had no delivery id", 502)
@@ -124,12 +130,13 @@ def _deliver_smtp_generic(
         raise ProspectingDeliveryError("REAL_EMAIL_DISABLED", "Real prospecting email is disabled by the operator kill switch", 409)
     if settings.PROSPECTING_EMAIL_PROVIDER != "smtp_generic":
         raise ProspectingDeliveryError("EMAIL_PROVIDER_NOT_ALLOWED", "smtp_generic is not the configured prospecting provider", 409)
-    mailboxes = {address: password for address, password in settings.prospecting_smtp_mailboxes()}
-    if not settings.PROSPECTING_SMTP_HOST or not mailboxes:
+    if not settings.SMTP_MAILBOXES:
         raise ProspectingDeliveryError("EMAIL_PROVIDER_NOT_CONFIGURED", "SMTP host and at least one mailbox are required", 409)
-    sender = (from_address or next(iter(mailboxes))).strip().lower()
-    if sender not in mailboxes:
+    mailbox = settings.smtp_mailbox(from_address)
+    if mailbox is None:
+        # Sending as an arbitrary address is how a service becomes a spam relay.
         raise ProspectingDeliveryError("EMAIL_FROM_NOT_ALLOWED", "From address is not in the smtp_generic allowlist", 409)
+    sender = mailbox.from_address
     message = EmailMessage()
     message["From"] = sender
     message["To"] = recipient
@@ -139,10 +146,12 @@ def _deliver_smtp_generic(
     message.set_content(text_body)
     message.add_alternative(html_body, subtype="html")
     try:
-        with smtplib.SMTP(settings.PROSPECTING_SMTP_HOST, settings.PROSPECTING_SMTP_PORT, timeout=20) as client:
-            if settings.PROSPECTING_SMTP_STARTTLS:
+        with smtplib.SMTP(
+            mailbox.host, mailbox.port, timeout=settings.PROSPECTING_SMTP_TIMEOUT_SECONDS
+        ) as client:
+            if mailbox.starttls:
                 client.starttls()
-            client.login(sender, mailboxes[sender])
+            client.login(mailbox.username, mailbox.password)
             client.send_message(message)
     except smtplib.SMTPAuthenticationError as exc:
         raise ProspectingDeliveryError("EMAIL_PROVIDER_REJECTED", "SMTP authentication failed", 502) from exc

@@ -5,12 +5,15 @@ because it offers a documented API; HTML scraping of directory sites is not.
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 from app.core.config import settings
+from app.integrations.http import (
+    IntegrationRejected,
+    IntegrationUnavailable,
+    RetryPolicy,
+    request_json,
+)
 
 GOOGLE_PLACES_ENDPOINT = "https://places.googleapis.com/v1/places:searchText"
 
@@ -78,24 +81,33 @@ def _google_places(query: str, region: str | None, limit: int) -> list[Discovere
     if not settings.GOOGLE_PLACES_API_KEY:
         raise DiscoveryProviderError("DISCOVERY_PROVIDER_NOT_CONFIGURED", "Google Places API key is not configured", 409)
     text_query = f"{query} {region or ''}".strip()
-    body = json.dumps({"textQuery": text_query, "languageCode": "sv", "regionCode": "SE", "maxResultCount": limit}).encode("utf-8")
-    request = Request(
-        GOOGLE_PLACES_ENDPOINT,
-        data=body,
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": settings.GOOGLE_PLACES_API_KEY,
-            "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.websiteUri,places.primaryTypeDisplayName,places.nationalPhoneNumber",
-        },
-    )
     try:
-        with urlopen(request, timeout=12) as response:
-            payload = json.loads(response.read(1_000_000).decode("utf-8"))
-    except HTTPError as exc:
-        raise DiscoveryProviderError("DISCOVERY_UPSTREAM_ERROR", f"Discovery provider returned HTTP {exc.code}", 502) from exc
-    except (URLError, TimeoutError, OSError, ValueError) as exc:
-        raise DiscoveryProviderError("DISCOVERY_UPSTREAM_UNAVAILABLE", "Discovery provider could not be reached", 502) from exc
+        payload = request_json(
+            GOOGLE_PLACES_ENDPOINT,
+            method="POST",
+            json_body={
+                "textQuery": text_query,
+                "languageCode": "sv",
+                "regionCode": "SE",
+                "maxResultCount": limit,
+            },
+            headers={
+                "X-Goog-Api-Key": settings.GOOGLE_PLACES_API_KEY,
+                "X-Goog-FieldMask": (
+                    "places.id,places.displayName,places.formattedAddress,places.websiteUri,"
+                    "places.primaryTypeDisplayName,places.nationalPhoneNumber"
+                ),
+            },
+            timeout=12,
+            retry=RetryPolicy(attempts=2),
+            provider="Google Places",
+        )
+    except IntegrationRejected as exc:
+        raise DiscoveryProviderError("DISCOVERY_UPSTREAM_ERROR", str(exc), 502) from exc
+    except IntegrationUnavailable as exc:
+        raise DiscoveryProviderError(
+            "DISCOVERY_UPSTREAM_UNAVAILABLE", "Discovery provider could not be reached", 502
+        ) from exc
     items: list[DiscoveredCompany] = []
     for place in payload.get("places", [])[:limit]:
         source_id = str(place.get("id") or "").strip()

@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 
 class CampaignCreate(BaseModel):
@@ -107,6 +107,7 @@ class ProspectItem(BaseModel):
     contact_role: str | None
     contact_email: str | None
     contact_verified: bool
+    contact_verification_source: str | None
     legal_basis: str
     do_not_contact: bool
     retention_until: datetime | None
@@ -125,6 +126,20 @@ class AnalysisRequest(BaseModel):
     allow_network_fetch: bool = False
 
 
+class ContactCandidate(BaseModel):
+    """A contact fact read off the analysed page, with its provenance.
+
+    A suggestion for a human reviewer — it carries no score, price or
+    recommendation, and never marks a prospect as verified on its own.
+    """
+
+    field: Literal["email", "phone", "company_name", "org_number"]
+    value: str
+    confidence: float = Field(ge=0, le=1)
+    source: str
+    evidence: str
+
+
 class AnalysisItem(BaseModel):
     id: str
     prospect_id: str
@@ -137,6 +152,7 @@ class AnalysisItem(BaseModel):
     findings: list[dict[str, Any]]
     evidence: list[dict[str, Any]]
     technical: dict[str, Any]
+    contact_candidates: list[ContactCandidate] = []
     snapshot_sha256: str | None
     fetch_duration_ms: int | None
     error_code: str | None
@@ -150,13 +166,47 @@ class ProposalCreate(BaseModel):
     package_currency: Literal["SEK"] = "SEK"
 
 
+SitemapEntry = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
+
+
+class ProposalBenefit(BaseModel):
+    """One customer-facing benefit line in a proposal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(..., min_length=1, max_length=160)
+    detail: str = Field("", max_length=600)
+
+
+class ProposalPackage(BaseModel):
+    """A priced delivery option. Prices are rendered publicly, so they are typed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1, max_length=120)
+    price_sek: int = Field(..., ge=0, le=100_000_000)
+    recommended: bool = False
+    features: list[Annotated[str, StringConstraints(min_length=1, max_length=200)]] = Field(
+        default_factory=list, max_length=20
+    )
+
+
+class ProposalTimelineEntry(BaseModel):
+    """One phase of the delivery plan."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    week: str = Field(..., min_length=1, max_length=40)
+    title: str = Field(..., min_length=1, max_length=200)
+
+
 class ProposalUpdate(BaseModel):
     headline: str | None = Field(None, min_length=5, max_length=300)
     summary: str | None = Field(None, min_length=10, max_length=5000)
-    sitemap: list[str] | None = Field(None, max_length=30)
-    benefits: list[dict[str, Any]] | None = Field(None, max_length=20)
-    packages: list[dict[str, Any]] | None = Field(None, max_length=10)
-    timeline: list[dict[str, Any]] | None = Field(None, max_length=20)
+    sitemap: list[SitemapEntry] | None = Field(None, max_length=30)
+    benefits: list[ProposalBenefit] | None = Field(None, max_length=20)
+    packages: list[ProposalPackage] | None = Field(None, max_length=10)
+    timeline: list[ProposalTimelineEntry] | None = Field(None, max_length=20)
     email_subject: str | None = Field(None, min_length=3, max_length=300)
     email_body: str | None = Field(None, min_length=20, max_length=20_000)
 

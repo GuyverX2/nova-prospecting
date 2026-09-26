@@ -1,12 +1,115 @@
-:root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #e8edf7; background: #09111e; }
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #e8edf7;
+  background: #09111e;
+  color-scheme: dark;
+}
 * { box-sizing: border-box; }
 body { margin: 0; }
-main { width: min(760px, calc(100% - 32px)); margin: 12vh auto; padding: 40px; border: 1px solid #294058; border-radius: 20px; background: #101c2d; }
-.eyebrow { color: #74d6bd; font-size: .75rem; font-weight: 800; letter-spacing: .16em; }
-h1 { font-size: clamp(2rem, 6vw, 4rem); line-height: 1; margin: .4rem 0 1rem; }
+
+.eyebrow { color: #74d6bd; font-size: .72rem; font-weight: 800; letter-spacing: .16em; margin: 0; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.6rem); line-height: 1.05; margin: .3rem 0 1rem; }
+h2 { font-size: 1.1rem; margin: 0 0 .6rem; }
 .lede { color: #b7c5d8; max-width: 58ch; }
-label { display: block; margin: 2rem 0 .5rem; font-weight: 700; }
-textarea, pre { width: 100%; border: 1px solid #405b75; border-radius: 8px; background: #07101c; color: inherit; padding: 12px; font: .9rem/1.5 ui-monospace, monospace; }
-textarea { min-height: 110px; resize: vertical; }
-button { margin-top: 12px; padding: 11px 16px; border: 0; border-radius: 8px; background: #74d6bd; color: #092019; font-weight: 800; cursor: pointer; }
-pre { margin-top: 24px; min-height: 80px; overflow: auto; white-space: pre-wrap; }
+.hint { color: #8fa3bb; font-size: .85rem; margin: 0 0 .6rem; }
+.meta { color: #9fb1c7; font-size: .9rem; margin: .2rem 0; }
+.empty { color: #7f93ab; font-size: .9rem; padding: 12px 0; }
+a { color: #74d6bd; }
+
+/* Token gate ------------------------------------------------------------- */
+.gate {
+  width: min(760px, calc(100% - 32px));
+  margin: 12vh auto;
+  padding: 40px;
+  border: 1px solid #294058;
+  border-radius: 20px;
+  background: #101c2d;
+}
+.gate label { display: block; margin: 1.6rem 0 .5rem; font-weight: 700; }
+
+/* Console ---------------------------------------------------------------- */
+.console { width: min(1400px, calc(100% - 32px)); margin: 32px auto 64px; }
+.console > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 20px 0; }
+.card { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid #23374d; border-radius: 12px; background: #101c2d; }
+.card span { color: #8fa3bb; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; }
+.card strong { font-size: 1.35rem; }
+
+.columns { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 20px; align-items: start; }
+.columns > section { border: 1px solid #23374d; border-radius: 16px; background: #101c2d; padding: 18px; }
+
+.toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+input, textarea, select {
+  width: 100%;
+  border: 1px solid #405b75;
+  border-radius: 8px;
+  background: #07101c;
+  color: inherit;
+  padding: 10px 12px;
+  font: .9rem/1.5 inherit;
+}
+textarea { min-height: 110px; resize: vertical; font-family: ui-monospace, monospace; }
+
+button {
+  margin-top: 10px;
+  padding: 10px 15px;
+  border: 0;
+  border-radius: 8px;
+  background: #74d6bd;
+  color: #092019;
+  font-weight: 800;
+  font-size: .9rem;
+  cursor: pointer;
+}
+button:disabled { background: #2c4056; color: #7f93ab; cursor: not-allowed; }
+button.ghost { background: transparent; border: 1px solid #405b75; color: #cfdcec; }
+
+.new-prospect { display: grid; gap: 8px; padding: 14px; border: 1px dashed #2c4056; border-radius: 12px; margin-bottom: 16px; }
+.new-prospect h2 { margin: 0; font-size: .95rem; text-transform: uppercase; letter-spacing: .08em; color: #8fa3bb; }
+.new-prospect button { margin-top: 2px; }
+
+.prospects { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 60vh; overflow: auto; }
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  text-align: left;
+  background: #0b1626;
+  border: 1px solid #23374d;
+  color: inherit;
+  font-weight: 500;
+}
+.row.selected { border-color: #74d6bd; }
+.row .name { font-weight: 700; }
+.row .domain { grid-column: 1; color: #8fa3bb; font-size: .82rem; }
+.pill { grid-column: 2; grid-row: 1; align-self: start; padding: 2px 8px; border-radius: 999px; background: #1c3247; color: #b7c5d8; font-size: .72rem; }
+.pill.blocked { grid-row: 2; background: #4a1f28; color: #ffc9d1; }
+
+.detail fieldset { border: 1px solid #23374d; border-radius: 12px; padding: 14px 16px; margin: 0 0 14px; }
+.detail legend { padding: 0 6px; color: #74d6bd; font-size: .8rem; font-weight: 800; letter-spacing: .08em; }
+.detail .check { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: .88rem; }
+.detail .check input { width: auto; }
+.detail .row-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.detail ul { margin: .5rem 0 0; padding-left: 1.1rem; color: #cfdcec; font-size: .9rem; }
+.detail .headline { font-weight: 700; margin: .4rem 0; }
+.analysis, .proposal { margin-top: 12px; padding-top: 10px; border-top: 1px solid #23374d; font-size: .9rem; }
+
+.candidates { margin-top: 10px; padding: 10px 12px; border: 1px dashed #23374d; border-radius: 10px; }
+.candidates ul { list-style: none; padding: 0; margin: .4rem 0 0; }
+.candidates li { padding: 4px 0; border-bottom: 1px solid #1b2c40; font-size: .86rem; }
+.candidates li:last-child { border-bottom: 0; }
+.candidates code { background: #17283d; color: #93e7ce; padding: 1px 6px; border-radius: 6px; font-size: .78rem; }
+button.link { width: auto; margin-left: 8px; padding: 2px 10px; background: transparent; border: 1px solid #2f4a68; color: #93e7ce; font-size: .78rem; }
+
+.status { margin: 12px 0; padding: 10px 14px; border-radius: 10px; font-size: .9rem; }
+.status.busy { background: #17283d; color: #b7c5d8; }
+.status.ok { background: #13342c; color: #93e7ce; }
+.status.error, .error { background: #3a1c24; color: #ffc9d1; }
+
+@media (max-width: 900px) {
+  .columns { grid-template-columns: 1fr; }
+}

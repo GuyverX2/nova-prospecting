@@ -44,7 +44,8 @@ def main() -> int:
         },
     )
     try:
-        with urlopen(request, timeout=20) as response:
+        # S310: RESEND_ENDPOINT is a fixed https constant in this script.
+        with urlopen(request, timeout=20) as response:  # noqa: S310
             body = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:400]

@@ -5,23 +5,29 @@ import csv
 import hashlib
 import io
 import json
+import re
 import secrets
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from html import escape
+from typing import Generic, TypeVar
 from urllib.parse import urlsplit
 
-from sqlalchemy import func
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth import PlatformPrincipal
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.crm.client import CrmRejected, CrmUnavailable, SalesOSCrmClient
+from app.prospecting.agentic_extract import assert_no_decisional_fields, extract_facts
 from app.prospecting.analyzer import WebsiteAuditError, analyze_html, fetch_public_html, normalize_public_url
 from app.prospecting.discovery import DiscoveryProviderError, discover_companies, provider_status
 from app.prospecting.models import (
-    ProspectSuppression,
     ProspectingCampaign,
     ProspectingPolicy,
+    ProspectSuppression,
     WebsiteAnalysis,
     WebsiteProposal,
     WebsiteProspect,
@@ -42,16 +48,34 @@ from app.prospecting.schemas import (
     AnalysisRequest,
     CampaignCreate,
     DeliveryRequest,
-    ProspectBulkCsvRequest,
-    ProspectCreate,
-    ProspectPromoteRequest,
-    ProspectUpdate,
-    ProspectingPolicyUpdate,
     ProposalReview,
     ProposalUpdate,
+    ProspectBulkCsvRequest,
+    ProspectCreate,
+    ProspectingPolicyUpdate,
+    ProspectPromoteRequest,
+    ProspectUpdate,
     SuppressionCreate,
 )
 from app.tenancy.service import TenantContext, record_audit
+
+logger = get_logger("nova.prospecting")
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class Page(Generic[T]):
+    """One slice of a tenant-scoped list plus the total behind it."""
+
+    items: list[T]
+    total: int
+    limit: int
+    offset: int
+
+    @property
+    def has_more(self) -> bool:
+        return self.offset + len(self.items) < self.total
 
 
 class ProspectingError(Exception):
@@ -76,7 +100,7 @@ def _load(value: str | None, fallback):
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _domain(url: str) -> str:
@@ -139,6 +163,7 @@ def analysis_dict(row: WebsiteAnalysis) -> dict:
         "findings": _load(row.findings_json, []),
         "evidence": _load(row.evidence_json, []),
         "technical": _load(row.technical_json, {}),
+        "contact_candidates": _load(row.contact_candidates_json, []),
         "snapshot_sha256": row.snapshot_sha256,
         "fetch_duration_ms": row.fetch_duration_ms,
         "error_code": row.error_code,
@@ -212,6 +237,9 @@ def prospect_dict(db: Session, row: WebsiteProspect, *, include_latest: bool = T
         "contact_role": row.contact_role,
         "contact_email": row.contact_email,
         "contact_verified": row.contact_verified,
+        # How a human verified this contact is the evidence behind the approval
+        # gate, so the console has to be able to show it back to the reviewer.
+        "contact_verification_source": row.contact_verification_source,
         "legal_basis": row.legal_basis,
         "do_not_contact": row.do_not_contact,
         "retention_until": row.retention_until,
@@ -249,9 +277,11 @@ def create_campaign(db: Session, ctx: TenantContext, principal: PlatformPrincipa
     return campaign_dict(row)
 
 
-def list_campaigns(db: Session, ctx: TenantContext) -> list[dict]:
-    rows = db.query(ProspectingCampaign).filter(ProspectingCampaign.tenant_id == ctx.tenant_id).order_by(ProspectingCampaign.created_at.desc()).all()
-    return [campaign_dict(row) for row in rows]
+def list_campaigns(db: Session, ctx: TenantContext, *, limit: int = 50, offset: int = 0) -> Page[dict]:
+    base = db.query(ProspectingCampaign).filter(ProspectingCampaign.tenant_id == ctx.tenant_id)
+    total = base.with_entities(func.count(ProspectingCampaign.id)).scalar() or 0
+    rows = base.order_by(ProspectingCampaign.created_at.desc()).limit(limit).offset(offset).all()
+    return Page([campaign_dict(row) for row in rows], total, limit, offset)
 
 
 def _require_campaign(db: Session, ctx: TenantContext, campaign_id: str) -> ProspectingCampaign:
@@ -303,7 +333,15 @@ def create_prospect(db: Session, ctx: TenantContext, principal: PlatformPrincipa
     )
     db.add(row)
     _audit(db, ctx, principal, "prospecting.prospect_created", "website_prospect", row.id, request_id, {"domain": domain, "source_provider": row.source_provider})
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # Two concurrent creates for the same domain: the unique index decides,
+        # and the loser gets the same 409 as the pre-checked path.
+        db.rollback()
+        raise ProspectingError(
+            409, "A prospect with this domain already exists", code="PROSPECT_DOMAIN_DUPLICATE"
+        ) from exc
     db.refresh(row)
     return prospect_dict(db, row)
 
@@ -448,22 +486,41 @@ def _latest_maps(db: Session, tenant_id: str, prospect_ids: list[str]) -> tuple[
         .all()
     )
     analysis_map: dict[str, WebsiteAnalysis] = {}
-    for row in analyses:
-        analysis_map.setdefault(row.prospect_id, row)
+    for analysis in analyses:
+        analysis_map.setdefault(analysis.prospect_id, analysis)
     proposal_map: dict[str, WebsiteProposal] = {}
-    for row in proposals:
-        proposal_map.setdefault(row.prospect_id, row)
+    for proposal in proposals:
+        proposal_map.setdefault(proposal.prospect_id, proposal)
     return analysis_map, proposal_map
 
 
-def list_prospects(db: Session, ctx: TenantContext, *, status: str | None = None, search: str | None = None, limit: int = 100) -> list[dict]:
+def list_prospects(
+    db: Session,
+    ctx: TenantContext,
+    *,
+    status: str | None = None,
+    search: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> Page[dict]:
     query = db.query(WebsiteProspect).filter(WebsiteProspect.tenant_id == ctx.tenant_id)
     if status:
         query = query.filter(WebsiteProspect.status == status)
     if search:
-        term = f"%{search.strip().lower()}%"
-        query = query.filter(func.lower(WebsiteProspect.company_name).like(term) | func.lower(WebsiteProspect.normalized_domain).like(term))
-    rows = query.order_by(WebsiteProspect.qualification_score.desc(), WebsiteProspect.created_at.desc()).limit(limit).all()
+        # Escape LIKE wildcards so a search for "%" is a literal search.
+        term = search.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{term}%"
+        query = query.filter(
+            func.lower(WebsiteProspect.company_name).like(pattern, escape="\\")
+            | func.lower(WebsiteProspect.normalized_domain).like(pattern, escape="\\")
+        )
+    total = query.with_entities(func.count(WebsiteProspect.id)).scalar() or 0
+    rows = (
+        query.order_by(WebsiteProspect.qualification_score.desc(), WebsiteProspect.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
     analysis_map, proposal_map = _latest_maps(db, ctx.tenant_id, [row.id for row in rows])
     listed: list[dict] = []
     for row in rows:
@@ -473,7 +530,54 @@ def list_prospects(db: Session, ctx: TenantContext, *, status: str | None = None
         payload["latest_analysis"] = analysis_dict(analysis) if analysis else None
         payload["latest_proposal"] = proposal_dict(proposal) if proposal else None
         listed.append(payload)
-    return listed
+    return Page(listed, total, limit, offset)
+
+
+def list_analyses(
+    db: Session, ctx: TenantContext, prospect_id: str, *, limit: int = 50, offset: int = 0
+) -> Page[dict]:
+    require_prospect(db, ctx, prospect_id)
+    query = db.query(WebsiteAnalysis).filter(
+        WebsiteAnalysis.tenant_id == ctx.tenant_id, WebsiteAnalysis.prospect_id == prospect_id
+    )
+    total = query.with_entities(func.count(WebsiteAnalysis.id)).scalar() or 0
+    rows = query.order_by(WebsiteAnalysis.created_at.desc()).limit(limit).offset(offset).all()
+    return Page([analysis_dict(row) for row in rows], total, limit, offset)
+
+
+def list_proposals(
+    db: Session, ctx: TenantContext, prospect_id: str, *, limit: int = 50, offset: int = 0
+) -> Page[dict]:
+    require_prospect(db, ctx, prospect_id)
+    query = db.query(WebsiteProposal).filter(
+        WebsiteProposal.tenant_id == ctx.tenant_id, WebsiteProposal.prospect_id == prospect_id
+    )
+    total = query.with_entities(func.count(WebsiteProposal.id)).scalar() or 0
+    rows = query.order_by(WebsiteProposal.version.desc()).limit(limit).offset(offset).all()
+    return Page([proposal_dict(row) for row in rows], total, limit, offset)
+
+
+def require_analysis_for_proposal(
+    db: Session, ctx: TenantContext, proposal: WebsiteProposal, prospect: WebsiteProspect
+) -> WebsiteAnalysis:
+    """The completed analysis a proposal was generated from, tenant-scoped."""
+    row = (
+        db.query(WebsiteAnalysis)
+        .filter(
+            WebsiteAnalysis.tenant_id == ctx.tenant_id,
+            WebsiteAnalysis.id == proposal.analysis_id,
+            WebsiteAnalysis.prospect_id == prospect.id,
+            WebsiteAnalysis.status == "complete",
+        )
+        .first()
+    )
+    if row is None:
+        raise ProspectingError(
+            409,
+            "A completed analysis is required for the meeting presentation",
+            code="PRESENTATION_ANALYSIS_REQUIRED",
+        )
+    return row
 
 
 def require_prospect(db: Session, ctx: TenantContext, prospect_id: str) -> WebsiteProspect:
@@ -582,7 +686,7 @@ def update_prospect(db: Session, ctx: TenantContext, principal: PlatformPrincipa
     _require_write(ctx)
     row = require_prospect(db, ctx, prospect_id)
     changes = payload.model_dump(exclude_unset=True)
-    if "contact_email" in changes and changes["contact_email"]:
+    if changes.get("contact_email"):
         email = str(changes["contact_email"]).strip().lower()
         if "@" not in email:
             raise ProspectingError(422, "contact_email must be valid", code="CONTACT_EMAIL_INVALID")
@@ -638,6 +742,69 @@ def _merge_pagespeed(result: dict, pagespeed: dict) -> None:
     )
 
 
+#: Facts a human can act on when verifying who to contact. Deliberately not the
+#: full extractor output: postal codes and social links are page trivia here.
+CONTACT_CANDIDATE_FIELDS = ("email", "phone", "company_name", "org_number")
+#: A suggestion list is a UI affordance, not a dataset. Keep it small.
+MAX_CONTACT_CANDIDATES = 12
+
+
+def _digits(value: object) -> str:
+    return re.sub(r"\D", "", str(value))
+
+
+def _contact_candidates(html: str | None) -> list[dict]:
+    """Suggestions for the operator, each carrying where it came from.
+
+    These never change prospect state. Promoting one into ``contact_email``
+    happens only through ``update_prospect``, which still demands that a human
+    records *how* the address was verified.
+    """
+    if not html:
+        return []
+    try:
+        facts = extract_facts(html)
+    except Exception:
+        # Extraction is a convenience on top of the analysis. A parser failure
+        # on a hostile page must not fail the analysis the operator asked for.
+        logger.exception("contact_extraction_failed")
+        return []
+    candidates = [
+        {
+            "field": fact.field,
+            "value": fact.value,
+            "confidence": round(fact.confidence, 2),
+            "source": fact.extractor,
+            "evidence": fact.evidence,
+        }
+        for fact in facts
+        if fact.field in CONTACT_CANDIDATE_FIELDS
+    ]
+    # A Swedish organisation number is ten digits and the phone pattern happily
+    # matches nine of them. Showing that as "a phone number we found" would be
+    # a suggestion the operator has to disprove, so drop it.
+    org_digits = {_digits(c["value"]) for c in candidates if c["field"] == "org_number"}
+    candidates = [
+        candidate
+        for candidate in candidates
+        if not (
+            candidate["field"] == "phone"
+            and any(_digits(candidate["value"]) in digits for digits in org_digits)
+        )
+    ]
+
+    def _rank(candidate: dict) -> tuple[float, str, str]:
+        return (-float(candidate["confidence"]), str(candidate["field"]), str(candidate["value"]))
+
+    candidates.sort(key=_rank)
+    trimmed = candidates[:MAX_CONTACT_CANDIDATES]
+    # The extractor may not smuggle a score, price or recommendation into the
+    # response; the boundary is enforced here, not just documented.
+    for candidate in trimmed:
+        assert_no_decisional_fields(candidate)
+    return trimmed
+
+
 def run_analysis(db: Session, ctx: TenantContext, principal: PlatformPrincipal, prospect_id: str, payload: AnalysisRequest, *, request_id: str | None = None) -> dict:
     _require_write(ctx)
     prospect = require_prospect(db, ctx, prospect_id)
@@ -654,13 +821,15 @@ def run_analysis(db: Session, ctx: TenantContext, principal: PlatformPrincipal, 
     db.flush()
     try:
         if payload.html_snapshot is not None:
-            result = analyze_html(payload.html_snapshot, url)
+            source_html = payload.html_snapshot
+            result = analyze_html(source_html, url)
         else:
             if not payload.allow_network_fetch:
                 raise WebsiteAuditError("NETWORK_FETCH_CONFIRMATION_REQUIRED", "Set allow_network_fetch=true to confirm this operator-selected public URL")
             if not settings.PROSPECTING_FETCH_ENABLED:
                 raise WebsiteAuditError("WEBSITE_FETCH_DISABLED", "Public website fetching is disabled by the operator kill switch", 409)
             html, final_url, duration_ms, snapshot_hash = fetch_public_html(url)
+            source_html = html
             result = analyze_html(html, url, final_url=final_url, fetch_duration_ms=duration_ms)
             result["snapshot_sha256"] = snapshot_hash
             try:
@@ -680,6 +849,7 @@ def run_analysis(db: Session, ctx: TenantContext, principal: PlatformPrincipal, 
         row.findings_json = _json(result["findings"])
         row.evidence_json = _json(result["evidence"])
         row.technical_json = _json(result["technical"])
+        row.contact_candidates_json = _json(_contact_candidates(source_html))
         row.snapshot_sha256 = result["snapshot_sha256"]
         row.fetch_duration_ms = result["fetch_duration_ms"]
         row.analyzed_at = _now()
@@ -692,6 +862,27 @@ def run_analysis(db: Session, ctx: TenantContext, principal: PlatformPrincipal, 
         row.error_detail = exc.detail
         db.commit()
         raise ProspectingError(exc.status_code, exc.detail, code=exc.code) from exc
+    except Exception:
+        # An unexpected failure must not leave the analysis pinned to "running":
+        # record the attempt as failed, then surface a typed error.
+        logger.exception("analysis_failed", extra={"prospect_id": prospect.id})
+        db.rollback()
+        db.add(
+            WebsiteAnalysis(
+                id=new_analysis_id(),
+                tenant_id=ctx.tenant_id,
+                prospect_id=prospect.id,
+                requested_by_subject=principal.sub,
+                status="failed",
+                analyzed_url=url,
+                error_code="ANALYSIS_FAILED",
+                error_detail="The website analysis failed unexpectedly",
+            )
+        )
+        db.commit()
+        raise ProspectingError(
+            500, "The website analysis failed unexpectedly", code="ANALYSIS_FAILED"
+        ) from None
     _audit(db, ctx, principal, "prospecting.analysis_completed", "website_analysis", row.id, request_id, {"prospect_id": prospect.id, "score": row.improvement_score, "evidence_count": len(result["evidence"])})
     db.commit()
     db.refresh(row)
@@ -712,7 +903,15 @@ def generate_proposal(db: Session, ctx: TenantContext, principal: PlatformPrinci
     _require_write(ctx)
     prospect = require_prospect(db, ctx, prospect_id)
     analysis = _latest_complete_analysis(db, ctx, prospect.id, analysis_id)
-    current_max = db.query(func.max(WebsiteProposal.version)).filter(WebsiteProposal.prospect_id == prospect.id).scalar() or 0
+    current_max = (
+        db.query(func.max(WebsiteProposal.version))
+        .filter(
+            WebsiteProposal.tenant_id == ctx.tenant_id,
+            WebsiteProposal.prospect_id == prospect.id,
+        )
+        .scalar()
+        or 0
+    )
     findings = _load(analysis.findings_json, [])
     top_findings = [item["title"] for item in findings if item.get("severity") != "positive"][:3]
     first_name = (prospect.contact_name or "").split(" ")[0] or ""
@@ -760,7 +959,16 @@ def generate_proposal(db: Session, ctx: TenantContext, principal: PlatformPrinci
     prospect.status = "proposal_ready"
     prospect.updated_at = _now()
     _audit(db, ctx, principal, "prospecting.proposal_generated", "website_proposal", row.id, request_id, {"prospect_id": prospect.id, "analysis_id": analysis.id, "version": row.version})
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # (prospect_id, version) is unique: a concurrent generate lost the race.
+        db.rollback()
+        raise ProspectingError(
+            409,
+            "Another proposal version was created concurrently; retry",
+            code="PROPOSAL_VERSION_CONFLICT",
+        ) from exc
     db.refresh(row)
     return proposal_dict(row)
 
@@ -852,6 +1060,15 @@ def public_proposal(db: Session, token: str) -> tuple[WebsiteProposal, WebsitePr
     return row, prospect, analysis
 
 
+def _format_sek(value: object) -> str:
+    """Operator-entered prices are rendered defensively: never 500 a public page."""
+    try:
+        amount = int(float(value))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return "Pris på förfrågan"
+    return f"{amount:,} SEK".replace(",", "\u00a0")
+
+
 def render_proposal_html(
     row: WebsiteProposal,
     prospect: WebsiteProspect,
@@ -863,7 +1080,14 @@ def render_proposal_html(
     findings = _load(analysis.findings_json, [])
     packages = proposal["packages"]
     finding_html = "".join(f"<article><strong>{escape(str(item.get('title', 'Observation')))}</strong><p>{escape(str(item.get('detail', '')))}</p><small>Säkerhet: {round(float(item.get('confidence', 0)) * 100)}%</small></article>" for item in findings[:6])
-    package_html = "".join(f"<article><h3>{escape(str(item.get('name', 'Paket')))}</h3><b>{int(item.get('price_sek', 0)):,} SEK</b><ul>{''.join(f'<li>{escape(str(feature))}</li>' for feature in item.get('features', []))}</ul></article>" for item in packages)
+    package_html = "".join(
+        f"<article><h3>{escape(str(item.get('name', 'Paket')))}</h3>"
+        f"<b>{_format_sek(item.get('price_sek'))}</b>"
+        f"<ul>{''.join(f'<li>{escape(str(feature))}</li>' for feature in item.get('features', []))}</ul>"
+        "</article>"
+        for item in packages
+        if isinstance(item, dict)
+    )
     sitemap = "".join(f"<span>{escape(str(page))}</span>" for page in proposal["sitemap"])
     film_link = (
         f'<a class="film" href="{escape(presentation_path, quote=True)}">Starta den kundanpassade mötesfilmen →</a>'
@@ -900,11 +1124,18 @@ def deliver_proposal(db: Session, ctx: TenantContext, principal: PlatformPrincip
             campaign = _require_campaign(db, ctx, prospect.campaign_id)
             daily_limit = campaign.daily_limit
         today = _now().replace(hour=0, minute=0, second=0, microsecond=0)
-        processed_today = db.query(WebsiteProposal).filter(
-            WebsiteProposal.tenant_id == ctx.tenant_id,
-            WebsiteProposal.delivery_status.in_(["queued", "mock_delivered", "delivered"]),
-            WebsiteProposal.updated_at >= today,
-        ).count()
+        # Counted on delivery_processed_at, not updated_at: editing an unrelated
+        # proposal must never consume - or restore - today's delivery budget.
+        processed_today = (
+            db.query(func.count(WebsiteProposal.id))
+            .filter(
+                WebsiteProposal.tenant_id == ctx.tenant_id,
+                WebsiteProposal.delivery_status.in_(["queued", "mock_delivered", "delivered"]),
+                WebsiteProposal.delivery_processed_at >= today,
+            )
+            .scalar()
+            or 0
+        )
         if processed_today >= daily_limit:
             raise ProspectingError(429, "The tenant delivery limit for today has been reached", code="DELIVERY_DAILY_LIMIT")
     token = opt_out_token(ctx.tenant_id, prospect.id, recipient)
@@ -933,20 +1164,35 @@ def deliver_proposal(db: Session, ctx: TenantContext, principal: PlatformPrincip
             from_address=payload.from_address,
         )
     except ProspectingDeliveryError as exc:
-        row.delivery_status = "failed"
-        row.delivery_provider = payload.provider
+        if not is_test:
+            row.delivery_status = "failed"
+            row.delivery_provider = payload.provider
+            row.updated_at = _now()
         db.commit()
         raise ProspectingError(exc.status_code, exc.detail, code=exc.code) from exc
-    row.delivery_status = "delivered" if receipt.external_sent else "queued" if payload.provider == "queue" else "mock_delivered"
-    row.delivery_provider = receipt.provider
-    row.delivery_id = receipt.delivery_id
-    row.delivered_at = _now() if receipt.external_sent else None
-    row.updated_at = _now()
+    processed_at = _now()
+    resolved_status = (
+        "delivered"
+        if receipt.external_sent
+        else "queued"
+        if payload.provider == "queue"
+        else "mock_delivered"
+    )
+    if not is_test:
+        # A test send reaches only the authenticated operator, so it must not
+        # spend the daily budget nor mark the proposal as delivered to the
+        # prospect - the audit event is its record.
+        row.delivery_status = resolved_status
+        row.delivery_provider = receipt.provider
+        row.delivery_id = receipt.delivery_id
+        row.delivered_at = processed_at if receipt.external_sent else None
+        row.delivery_processed_at = processed_at
+        row.updated_at = processed_at
     _audit(db, ctx, principal, "prospecting.delivery_processed", "website_proposal", row.id, request_id, {"provider": receipt.provider, "external_sent": receipt.external_sent, "recipient_domain": recipient.split("@")[-1], "test": is_test})
     db.commit()
     return {
         "proposal_id": row.id,
-        "status": row.delivery_status,
+        "status": resolved_status,
         "provider": receipt.provider,
         "delivery_id": receipt.delivery_id,
         "external_sent": receipt.external_sent,
@@ -1075,17 +1321,38 @@ def update_policy(db: Session, ctx: TenantContext, principal: PlatformPrincipal,
 
 
 def summary(db: Session, ctx: TenantContext) -> dict:
-    prospects = db.query(WebsiteProspect).filter(WebsiteProspect.tenant_id == ctx.tenant_id).all()
-    analyzed_sites = db.query(WebsiteAnalysis).filter(WebsiteAnalysis.tenant_id == ctx.tenant_id, WebsiteAnalysis.status == "complete").count()
-    awaiting = db.query(WebsiteProposal).filter(WebsiteProposal.tenant_id == ctx.tenant_id, WebsiteProposal.status == "draft").count()
-    approved = db.query(WebsiteProposal).filter(WebsiteProposal.tenant_id == ctx.tenant_id, WebsiteProposal.status == "approved").count()
-    suppressed = db.query(ProspectSuppression).filter(ProspectSuppression.tenant_id == ctx.tenant_id).count()
+    """Tenant dashboard counters, aggregated in SQL rather than in memory."""
+    prospect_totals = db.execute(
+        select(
+            func.count(WebsiteProspect.id).filter(WebsiteProspect.status.notin_(["lost", "won"])),
+            func.coalesce(
+                func.sum(WebsiteProspect.estimated_value_sek).filter(WebsiteProspect.status != "lost"),
+                0,
+            ),
+        ).where(WebsiteProspect.tenant_id == ctx.tenant_id)
+    ).one()
+    proposal_totals = db.execute(
+        select(
+            func.count(WebsiteProposal.id).filter(WebsiteProposal.status == "draft"),
+            func.count(WebsiteProposal.id).filter(WebsiteProposal.status == "approved"),
+        ).where(WebsiteProposal.tenant_id == ctx.tenant_id)
+    ).one()
+    analyzed_sites = db.execute(
+        select(func.count(WebsiteAnalysis.id)).where(
+            WebsiteAnalysis.tenant_id == ctx.tenant_id, WebsiteAnalysis.status == "complete"
+        )
+    ).scalar_one()
+    suppressed = db.execute(
+        select(func.count(ProspectSuppression.id)).where(
+            ProspectSuppression.tenant_id == ctx.tenant_id
+        )
+    ).scalar_one()
     return {
-        "analyzed_sites": analyzed_sites,
-        "qualified_opportunities": len([row for row in prospects if row.status not in {"lost", "won"}]),
-        "awaiting_review": awaiting,
-        "approved": approved,
-        "potential_value_sek": sum(row.estimated_value_sek for row in prospects if row.status != "lost"),
-        "suppressed_contacts": suppressed,
+        "analyzed_sites": int(analyzed_sites),
+        "qualified_opportunities": int(prospect_totals[0]),
+        "awaiting_review": int(proposal_totals[0]),
+        "approved": int(proposal_totals[1]),
+        "potential_value_sek": int(prospect_totals[1]),
+        "suppressed_contacts": int(suppressed),
         "providers": provider_status(),
     }

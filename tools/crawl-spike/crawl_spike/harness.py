@@ -11,7 +11,9 @@ from crawl_spike.capabilities import CAPABILITY_MATRIX, recommend_decision
 from crawl_spike.providers import crawl4ai_arm, crawlee_arm, keep_nova
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_FIXTURE = REPO_ROOT / "tools/crawl-spike/fixtures/crawl-cases.yaml"
+# Single source of truth: the fixture lives with the decision record it supports
+# (it used to be duplicated here, and the two copies drifted apart in comments).
+DEFAULT_FIXTURE = REPO_ROOT / "docs/architecture-program/wave-0-3/fixtures/crawl-cases.yaml"
 PAGES_DIR = REPO_ROOT / "tools/crawl-spike/fixtures/pages"
 
 
@@ -162,8 +164,7 @@ def run_spike(*, fixture_path: Path | None = None) -> SpikeReport:
                     if not viewport_ok:
                         passed = False
                 if "json_ld_blocks_min" in audit_checks:
-                    json_ld = technical.get("script_count")
-                    # analyze_html stores json_ld count via evidence ev_jsonld value
+                    # analyze_html stores the JSON-LD count as the ev_jsonld evidence value.
                     json_ld_blocks = next(
                         (ev.get("value") for ev in audit.get("evidence", []) if ev.get("id") == "ev_jsonld"),
                         0,
